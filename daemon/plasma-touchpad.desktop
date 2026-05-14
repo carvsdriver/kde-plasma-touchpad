@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Plasma Touchpad Daemon
+Comment=Yoga Book 9 on-screen touchpad
+Exec=/usr/lib64/libexec/plasma-touchpad-daemon
+Icon=input-touchpad
+Type=Application
+Categories=
+OnlyShowIn=KDE;
+NoDisplay=true

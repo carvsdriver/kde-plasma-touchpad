@@ -98,12 +98,6 @@ KCM.SimpleKCM {
             onToggled: { kcm.twoFingerRightClick = checked; kcm.needsSave = true }
         }
 
-        QQC2.CheckBox {
-            Kirigami.FormData.label: i18n("Two-finger rotate (REL_DIAL)")
-            checked: kcm.twoFingerRotate
-            onToggled: { kcm.twoFingerRotate = checked; kcm.needsSave = true }
-        }
-
         Kirigami.Separator {
             Kirigami.FormData.label: i18n("Gestures")
             Kirigami.FormData.isSection: true
@@ -119,6 +113,12 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Pinch to zoom")
             checked: kcm.pinchZoom
             onToggled: { kcm.pinchZoom = checked; kcm.needsSave = true }
+        }
+
+        QQC2.CheckBox {
+            Kirigami.FormData.label: i18n("Two-finger rotate (REL_DIAL)")
+            checked: kcm.twoFingerRotate
+            onToggled: { kcm.twoFingerRotate = checked; kcm.needsSave = true }
         }
     }
 }

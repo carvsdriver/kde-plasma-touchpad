@@ -4,11 +4,14 @@
 #include <KConfig>
 #include <KConfigGroup>
 
+#include <QDBusConnection>
+#include <QDBusMessage>
+
 #include "../common/Settings.h"
 
 namespace PlasmaTP {
 
-K_PLUGIN_CLASS_WITH_JSON(KCMTouchpad, "kcm_plasma_touchpad.json")
+K_PLUGIN_CLASS_WITH_JSON(KCMTouchpad, "kcm_yoga9_onscreen_touchpad.json")
 
 KCMTouchpad::KCMTouchpad(QObject *parent, const KPluginMetaData &data)
     : KQuickConfigModule(parent, data)
@@ -20,22 +23,16 @@ void KCMTouchpad::load()
 {
     KConfig cfg(QLatin1String(Settings::configFile()));
     KConfigGroup grp = cfg.group(QLatin1String(Settings::groupName()));
-
     Settings s;
+    setColorScheme(grp.readEntry("colorScheme", s.colorScheme));
+    setButtonCount(grp.readEntry("buttonCount", s.buttonCount));
     setPointerSpeed(grp.readEntry("pointerSpeed", s.pointerSpeed));
     setScrollSpeed(grp.readEntry("scrollSpeed", s.scrollSpeed));
+    setDisableRotation(grp.readEntry("disableRotation", s.disableRotation));
+    setThreeFingerSwipe(grp.readEntry("threeFingerSwipe", s.threeFingerSwipe));
+    setPinchZoom(grp.readEntry("pinchZoom", s.pinchZoom));
     setTapToClick(grp.readEntry("tapToClick", s.tapToClick));
-    setMovePanels(grp.readEntry("movePanels", s.movePanels));
-    setActivateOnMask(grp.readEntry("activateOnMask", s.activateOnMask));
-    setButtonCount(grp.readEntry("buttonCount", s.buttonCount));
-    setColorScheme(grp.readEntry("colorScheme", s.colorScheme));
-    setGestureRightClick(grp.readEntry("gestureRightClick",       s.gestureRightClick));
-    setGestureSmartZoom(grp.readEntry("gestureSmartZoom",         s.gestureSmartZoom));
-    setGestureScroll(grp.readEntry("gestureScroll",               s.gestureScroll));
-    setGesturePinchZoom(grp.readEntry("gesturePinchZoom",         s.gesturePinchZoom));
-    setGestureRotate(grp.readEntry("gestureRotate",               s.gestureRotate));
-    setGestureSwipePages(grp.readEntry("gestureSwipePages",       s.gestureSwipePages));
-    setGestureSwipeDesktops(grp.readEntry("gestureSwipeDesktops", s.gestureSwipeDesktops));
+    setTwoFingerRightClick(grp.readEntry("twoFingerRightClick", s.twoFingerRightClick));
     setNeedsSave(false);
 }
 
@@ -43,42 +40,37 @@ void KCMTouchpad::save()
 {
     KConfig cfg(QLatin1String(Settings::configFile()));
     KConfigGroup grp = cfg.group(QLatin1String(Settings::groupName()));
-
+    grp.writeEntry("colorScheme", m_colorScheme);
+    grp.writeEntry("buttonCount", m_buttonCount);
     grp.writeEntry("pointerSpeed", m_pointerSpeed);
     grp.writeEntry("scrollSpeed", m_scrollSpeed);
+    grp.writeEntry("disableRotation", m_disableRotation);
+    grp.writeEntry("threeFingerSwipe", m_threeFingerSwipe);
+    grp.writeEntry("pinchZoom", m_pinchZoom);
     grp.writeEntry("tapToClick", m_tapToClick);
-    grp.writeEntry("movePanels", m_movePanels);
-    grp.writeEntry("activateOnMask", m_activateOnMask);
-    grp.writeEntry("buttonCount", m_buttonCount);
-    grp.writeEntry("colorScheme",         m_colorScheme);
-    grp.writeEntry("gestureRightClick",    m_gestureRightClick);
-    grp.writeEntry("gestureSmartZoom",     m_gestureSmartZoom);
-    grp.writeEntry("gestureScroll",        m_gestureScroll);
-    grp.writeEntry("gesturePinchZoom",     m_gesturePinchZoom);
-    grp.writeEntry("gestureRotate",        m_gestureRotate);
-    grp.writeEntry("gestureSwipePages",    m_gestureSwipePages);
-    grp.writeEntry("gestureSwipeDesktops", m_gestureSwipeDesktops);
+    grp.writeEntry("twoFingerRightClick", m_twoFingerRightClick);
     cfg.sync();
     setNeedsSave(false);
+
+    QDBusMessage sig = QDBusMessage::createSignal(
+        QStringLiteral("/org/kde/plasma/touchpad"),
+        QStringLiteral("org.kde.plasma.touchpad"),
+        QStringLiteral("configChanged"));
+    QDBusConnection::sessionBus().send(sig);
 }
 
 void KCMTouchpad::defaults()
 {
     Settings s;
+    setColorScheme(s.colorScheme);
+    setButtonCount(s.buttonCount);
     setPointerSpeed(s.pointerSpeed);
     setScrollSpeed(s.scrollSpeed);
+    setDisableRotation(s.disableRotation);
+    setThreeFingerSwipe(s.threeFingerSwipe);
+    setPinchZoom(s.pinchZoom);
     setTapToClick(s.tapToClick);
-    setMovePanels(s.movePanels);
-    setActivateOnMask(s.activateOnMask);
-    setButtonCount(s.buttonCount);
-    setColorScheme(s.colorScheme);
-    setGestureRightClick(s.gestureRightClick);
-    setGestureSmartZoom(s.gestureSmartZoom);
-    setGestureScroll(s.gestureScroll);
-    setGesturePinchZoom(s.gesturePinchZoom);
-    setGestureRotate(s.gestureRotate);
-    setGestureSwipePages(s.gestureSwipePages);
-    setGestureSwipeDesktops(s.gestureSwipeDesktops);
+    setTwoFingerRightClick(s.twoFingerRightClick);
     setNeedsSave(true);
 }
 

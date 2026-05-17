@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DockWatcher.h"
+#include "../common/Settings.h"
 
 #include <QObject>
 #include <QRectF>
@@ -42,15 +43,16 @@ public:
     void show(DockPosition position);
     void hide();
 
-    bool isVisible() const { return m_view != nullptr; }
-
 private Q_SLOTS:
+    void reloadSettings();
     void onVirtualKeyboardPropertyChanged(const QString &iface,
                                           const QVariantMap &changed,
                                           const QStringList &invalidated);
 
 private:
     QRectF overlayRect(DockPosition position) const;
+    void applySettings(const Settings &s);
+    void setRotationSuppressed(bool suppress);
     void setVirtualKeyboardEnabled(bool enabled);
     void watchVirtualKeyboard();
 

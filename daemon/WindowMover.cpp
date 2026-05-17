@@ -102,6 +102,7 @@ void WindowMover::moveWindowsToTopScreen()
     m_moved = true;
 }
 
+
 void WindowMover::restore()
 {
     if (!m_moved)

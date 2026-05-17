@@ -1,10 +1,11 @@
-kcmutils_add_qml_kcm(kcm_plasma_touchpad
+kcmutils_add_qml_kcm(kcm_yoga9_onscreen_touchpad
     SOURCES
         KCMTouchpad.cpp
 )
 
-target_link_libraries(kcm_plasma_touchpad PRIVATE
+target_link_libraries(kcm_yoga9_onscreen_touchpad PRIVATE
     Qt6::Core
+    Qt6::DBus
     KF6::CoreAddons
     KF6::KCMUtilsQuick
     KF6::ConfigCore
@@ -12,5 +13,5 @@ target_link_libraries(kcm_plasma_touchpad PRIVATE
     plasma-touchpad-common
 )
 
-install(FILES kcm_plasma_touchpad.json
+install(FILES kcm_yoga9_onscreen_touchpad.json
     DESTINATION ${KDE_INSTALL_DATADIR}/plasma/kcms)

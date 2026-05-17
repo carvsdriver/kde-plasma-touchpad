@@ -1,60 +1,62 @@
 import QtQuick
 import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
 
 // Root item fills the overlay window (full width, half of eDP-2 height).
 // Layout: [palm rest | trackpad + buttons | palm rest]  (each 1/3 width)
 //
-// Context properties injected by TouchpadOverlay:
-//   int    buttonCount  — 0 (MacBook) / 1 / 2 / 3
-//   string colorScheme  — "system" | "light" | "dark"
-
 Item {
     id: root
     anchors.fill: parent
 
+    // Set by TouchpadOverlay via rootObject()->setProperty() — fully reactive.
+    property int buttonCount: 3
+    property string colorScheme: "system"
+
     // ── Colour scheme ───────────────────────────────────────────────────────
-    SystemPalette { id: sysPalette; colorGroup: SystemPalette.Active }
+    // Kirigami.Theme is bound to KDE's color scheme system and updates live
+    // when the user switches themes — unlike SystemPalette which is static.
 
     readonly property color bgColor:
         colorScheme === "dark" ? "#2d2d2d" :
         colorScheme === "light" ? "#f0f0f0" :
-        sysPalette.window
+        Kirigami.Theme.backgroundColor
 
     readonly property color palmColor:
         colorScheme === "dark" ? "#252525" :
         colorScheme === "light" ? "#e8e8e8" :
-        Qt.darker(sysPalette.window, 1.06)
+        Qt.darker(Kirigami.Theme.backgroundColor, 1.06)
 
     readonly property color borderColor:
         colorScheme === "dark" ? "#1a1a1a" :
         colorScheme === "light" ? "#d0d0d0" :
-        Qt.darker(sysPalette.window, 1.18)
+        Qt.darker(Kirigami.Theme.backgroundColor, 1.18)
 
     readonly property color dimTextColor:
         colorScheme === "dark" ? "#555555" :
         colorScheme === "light" ? "#c0c0c0" :
-        Qt.rgba(sysPalette.windowText.r, sysPalette.windowText.g,
-                sysPalette.windowText.b, 0.22)
+        Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+                Kirigami.Theme.textColor.b, 0.22)
 
     readonly property color btnBg:
         colorScheme === "dark" ? "#3c3c3c" :
         colorScheme === "light" ? "#e0e0e0" :
-        sysPalette.button
+        Kirigami.Theme.alternateBackgroundColor
 
     readonly property color btnText:
         colorScheme === "dark" ? "#dddddd" :
         colorScheme === "light" ? "#222222" :
-        sysPalette.buttonText
+        Kirigami.Theme.textColor
 
     readonly property color btnHighlight:
         colorScheme === "dark" ? "#5a8fc2" :
         colorScheme === "light" ? "#4a90d9" :
-        sysPalette.highlight
+        Kirigami.Theme.highlightColor
 
     readonly property color btnHighlightText:
         colorScheme === "dark" ? "#ffffff" :
         colorScheme === "light" ? "#ffffff" :
-        sysPalette.highlightedText
+        Kirigami.Theme.highlightedTextColor
 
     // ── Button model ────────────────────────────────────────────────────────
     readonly property var buttonModel:

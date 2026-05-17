@@ -4,8 +4,9 @@
 #include "PanelMover.h"
 #include "Settings.h"
 
+#include <QProcess>
+#include <QQuickItem>
 #include <QQuickView>
-#include <QQmlContext>
 #include <QScreen>
 #include <QGuiApplication>
 #include <QUrl>
@@ -28,6 +29,23 @@ static constexpr const char *BOTTOM_SCREEN = "eDP-2";
 static constexpr int OVERLAY_TRIM_TOP_HALF = 115;  // keyboard on top
 static constexpr int OVERLAY_TRIM_BOTTOM_HALF = 110;  // keyboard on bottom
 
+static Settings loadFromConfig()
+{
+    Settings s;
+    KConfig cfg(QLatin1String(Settings::configFile()));
+    KConfigGroup grp = cfg.group(QLatin1String(Settings::groupName()));
+    s.buttonCount = grp.readEntry("buttonCount", s.buttonCount);
+    s.colorScheme = grp.readEntry("colorScheme", s.colorScheme);
+    s.pointerSpeed = grp.readEntry("pointerSpeed", s.pointerSpeed);
+    s.scrollSpeed = grp.readEntry("scrollSpeed", s.scrollSpeed);
+    s.disableRotation = grp.readEntry("disableRotation", s.disableRotation);
+    s.threeFingerSwipe = grp.readEntry("threeFingerSwipe", s.threeFingerSwipe);
+    s.pinchZoom = grp.readEntry("pinchZoom", s.pinchZoom);
+    s.tapToClick = grp.readEntry("tapToClick", s.tapToClick);
+    s.twoFingerRightClick = grp.readEntry("twoFingerRightClick", s.twoFingerRightClick);
+    return s;
+}
+
 TouchpadOverlay::TouchpadOverlay(QObject *parent)
     : QObject(parent)
     , m_touch(new TouchInputHandler(this))
@@ -35,6 +53,14 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     , m_panels(new PanelMover(this))
 {
     watchVirtualKeyboard();
+
+    QDBusConnection::sessionBus().connect(
+        QString(),
+        QStringLiteral("/org/kde/plasma/touchpad"),
+        QStringLiteral("org.kde.plasma.touchpad"),
+        QStringLiteral("configChanged"),
+        this, SLOT(reloadSettings()));
+
 }
 
 TouchpadOverlay::~TouchpadOverlay()
@@ -79,25 +105,7 @@ void TouchpadOverlay::show(DockPosition position)
         return;
     }
 
-    // Load settings from config before creating the QML view so context
-    // properties can be set before setSource() triggers QML loading.
-    Settings s;
-    {
-        KConfig cfg(QLatin1String(Settings::configFile()));
-        KConfigGroup grp = cfg.group(QLatin1String(Settings::groupName()));
-        s.pointerSpeed = grp.readEntry("pointerSpeed", s.pointerSpeed);
-        s.scrollSpeed = grp.readEntry("scrollSpeed", s.scrollSpeed);
-        s.tapToClick = grp.readEntry("tapToClick", s.tapToClick);
-        s.buttonCount = grp.readEntry("buttonCount", s.buttonCount);
-        s.colorScheme = grp.readEntry("colorScheme", s.colorScheme);
-        s.gestureRightClick = grp.readEntry("gestureRightClick", s.gestureRightClick);
-        s.gestureSmartZoom = grp.readEntry("gestureSmartZoom", s.gestureSmartZoom);
-        s.gestureScroll = grp.readEntry("gestureScroll", s.gestureScroll);
-        s.gesturePinchZoom = grp.readEntry("gesturePinchZoom", s.gesturePinchZoom);
-        s.gestureRotate = grp.readEntry("gestureRotate", s.gestureRotate);
-        s.gestureSwipePages = grp.readEntry("gestureSwipePages", s.gestureSwipePages);
-        s.gestureSwipeDesktops = grp.readEntry("gestureSwipeDesktops", s.gestureSwipeDesktops);
-    }
+    const Settings s = loadFromConfig();
 
     // Move windows and panels to eDP-1 BEFORE creating the overlay surface.
     // This lets KWin complete its active-screen reassignment now, so it has
@@ -143,8 +151,6 @@ void TouchpadOverlay::show(DockPosition position)
     // Create the QML overlay window.
     // Context properties must be set before setSource() triggers QML loading.
     m_view = new QQuickView();
-    m_view->rootContext()->setContextProperty(QStringLiteral("buttonCount"), s.buttonCount);
-    m_view->rootContext()->setContextProperty(QStringLiteral("colorScheme"), s.colorScheme);
     m_view->setResizeMode(QQuickView::SizeRootObjectToView);
     m_view->setSource(QUrl(QStringLiteral("qrc:/org/kde/plasma/touchpad/qml/Touchpad.qml")));
     m_view->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
@@ -156,17 +162,16 @@ void TouchpadOverlay::show(DockPosition position)
 
     // Configure as a LayerShell overlay surface pinned to eDP-2.
     m_layerWindow = LayerShellQt::Window::get(m_view);
-    auto *layerWindow = m_layerWindow;
-    layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-    layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-    layerWindow->setScope(QStringLiteral("plasma-touchpad"));
-    layerWindow->setExclusiveZone(-1); // don't push other surfaces away
+    m_layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
+    m_layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+    m_layerWindow->setScope(QStringLiteral("plasma-touchpad"));
+    m_layerWindow->setExclusiveZone(-1); // don't push other surfaces away
     // Explicitly pin the LayerShell surface to eDP-2.  setScreen() stores the
     // QScreen* in LayerShellQt::WindowPrivate and uses it directly when the
     // zwlr_layer_surface_v1 is created at show() time, avoiding the "placeholder
     // screen" path that QWindow::screen() can fall into before the compositor
     // has fully mapped the output.
-    layerWindow->setScreen(targetScreen);
+    m_layerWindow->setScreen(targetScreen);
 
     // TopHalf dock  → overlay on bottom half → anchor bottom
     // BottomHalf dock → overlay on top half  → anchor top
@@ -174,13 +179,13 @@ void TouchpadOverlay::show(DockPosition position)
     LayerShellQt::Window::Anchor vertAnchor = overlayOnTop
         ? LayerShellQt::Window::AnchorTop
         : LayerShellQt::Window::AnchorBottom;
-    layerWindow->setAnchors(LayerShellQt::Window::Anchors(
+    m_layerWindow->setAnchors(LayerShellQt::Window::Anchors(
         LayerShellQt::Window::AnchorLeft |
         LayerShellQt::Window::AnchorRight |
         vertAnchor));
     const int trim = (position == DockPosition::BottomHalf) ? OVERLAY_TRIM_BOTTOM_HALF
                                                               : OVERLAY_TRIM_TOP_HALF;
-    layerWindow->setDesiredSize(QSize(0, m_screenH / 2 - trim));
+    m_layerWindow->setDesiredSize(QSize(0, m_screenH / 2 - trim));
 
     connect(m_view, &QWindow::screenChanged, this, [this](QScreen *s) {
         const QString name = s ? s->name() : QStringLiteral("(null)");
@@ -194,6 +199,7 @@ void TouchpadOverlay::show(DockPosition position)
         for (QScreen *screen : QGuiApplication::screens()) {
             if (screen->name() == QLatin1String(BOTTOM_SCREEN)) {
                 m_layerWindow->setScreen(screen);
+                m_view->show();
                 return;
             }
         }
@@ -202,21 +208,10 @@ void TouchpadOverlay::show(DockPosition position)
 
     m_view->show();
 
-    // Apply settings to the input handler
     const QRectF touchRect = overlayRect(position);
     m_touch->setScreenSize(m_screenW, m_screenH);
     m_touch->setTouchpadRect(touchRect);
-    m_touch->setPointerSpeed(s.pointerSpeed);
-    m_touch->setScrollSpeed(s.scrollSpeed);
-    m_touch->setTapToClick(s.tapToClick);
-    m_touch->setButtonCount(s.buttonCount);
-    m_touch->setGestureRightClick(s.gestureRightClick);
-    m_touch->setGestureSmartZoom(s.gestureSmartZoom);
-    m_touch->setGestureScroll(s.gestureScroll);
-    m_touch->setGesturePinchZoom(s.gesturePinchZoom);
-    m_touch->setGestureRotate(s.gestureRotate);
-    m_touch->setGestureSwipePages(s.gestureSwipePages);
-    m_touch->setGestureSwipeDesktops(s.gestureSwipeDesktops);
+    applySettings(s);
     if (!m_touch->start())
         qWarning() << "TouchpadOverlay: failed to start touch input handler";
 
@@ -224,6 +219,31 @@ void TouchpadOverlay::show(DockPosition position)
              << "position" << static_cast<int>(position)
              << "touchRect" << touchRect;
 }
+
+void TouchpadOverlay::applySettings(const Settings &s)
+{
+    m_touch->setButtonCount(s.buttonCount);
+    if (m_view && m_view->rootObject()) {
+        m_view->rootObject()->setProperty("buttonCount", s.buttonCount);
+        m_view->rootObject()->setProperty("colorScheme", s.colorScheme);
+    }
+    m_touch->setPointerSpeed(s.pointerSpeed);
+    m_touch->setScrollSpeed(s.scrollSpeed);
+    m_touch->setThreeFingerSwipe(s.threeFingerSwipe);
+    m_touch->setPinchZoom(s.pinchZoom);
+    m_touch->setTapToClick(s.tapToClick);
+    m_touch->setTwoFingerRightClick(s.twoFingerRightClick);
+    setRotationSuppressed(s.disableRotation && m_view != nullptr);
+}
+
+void TouchpadOverlay::reloadSettings()
+{
+    if (!m_view)
+        return;
+    applySettings(loadFromConfig());
+    qDebug() << "TouchpadOverlay: settings reloaded";
+}
+
 
 void TouchpadOverlay::hide()
 {
@@ -235,6 +255,7 @@ void TouchpadOverlay::hide()
     m_windows->restore();
     m_panels->restorePanels();
     setVirtualKeyboardEnabled(true);
+    setRotationSuppressed(false);
 
     m_blackoutLayerWindow = nullptr;
     m_blackout->hide();
@@ -247,6 +268,13 @@ void TouchpadOverlay::hide()
     m_view = nullptr;
 
     qDebug() << "TouchpadOverlay: hidden";
+}
+
+void TouchpadOverlay::setRotationSuppressed(bool suppress)
+{
+    const QString signal = suppress ? QStringLiteral("-STOP") : QStringLiteral("-CONT");
+    QProcess::startDetached(QStringLiteral("pkill"), {signal, QStringLiteral("-f"), QStringLiteral("rotate-screens.sh")});
+    qDebug() << "TouchpadOverlay: rotation script" << (suppress ? "paused" : "resumed");
 }
 
 void TouchpadOverlay::setVirtualKeyboardEnabled(bool enabled)

@@ -1,14 +1,14 @@
 {
     "KPlugin": {
+        "Id": "kcm_yoga9_onscreen_touchpad",
         "Name": "On-Screen Touchpad",
         "Description": "Configure the Yoga Book 9 on-screen touchpad",
         "Icon": "input-touchpad",
-        "Category": "Input Devices",
         "License": "GPL-2.0-or-later",
         "Authors": [
             { "Name": "Dave Carey", "Email": "carvsdriver@gmail.com" }
         ],
         "Version": "0.1.0"
     },
-    "X-KDE-System-Settings-Parent-Category": "pointing-devices"
+    "X-KDE-System-Settings-Parent-Category": "hardware"
 }

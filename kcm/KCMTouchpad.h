@@ -18,6 +18,7 @@ class KCMTouchpad : public KQuickConfigModule
     Q_PROPERTY(bool pinchZoom READ pinchZoom WRITE setPinchZoom NOTIFY pinchZoomChanged)
     Q_PROPERTY(bool tapToClick READ tapToClick WRITE setTapToClick NOTIFY tapToClickChanged)
     Q_PROPERTY(bool twoFingerRightClick READ twoFingerRightClick WRITE setTwoFingerRightClick NOTIFY twoFingerRightClickChanged)
+    Q_PROPERTY(bool twoFingerRotate READ twoFingerRotate WRITE setTwoFingerRotate NOTIFY twoFingerRotateChanged)
 
 public:
     explicit KCMTouchpad(QObject *parent, const KPluginMetaData &data);
@@ -35,6 +36,7 @@ public:
     bool pinchZoom() const { return m_pinchZoom; }
     bool tapToClick() const { return m_tapToClick; }
     bool twoFingerRightClick() const { return m_twoFingerRightClick; }
+    bool twoFingerRotate() const { return m_twoFingerRotate; }
     void setColorScheme(const QString &v) { if (m_colorScheme != v) { m_colorScheme = v; Q_EMIT colorSchemeChanged(); } }
     void setButtonCount(int v) { if (m_buttonCount != v) { m_buttonCount = v; Q_EMIT buttonCountChanged(); } }
     void setPointerSpeed(double v) { if (m_pointerSpeed != v) { m_pointerSpeed = v; Q_EMIT pointerSpeedChanged(); } }
@@ -44,6 +46,7 @@ public:
     void setPinchZoom(bool v) { if (m_pinchZoom != v) { m_pinchZoom = v; Q_EMIT pinchZoomChanged(); } }
     void setTapToClick(bool v) { if (m_tapToClick != v) { m_tapToClick = v; Q_EMIT tapToClickChanged(); } }
     void setTwoFingerRightClick(bool v) { if (m_twoFingerRightClick != v) { m_twoFingerRightClick = v; Q_EMIT twoFingerRightClickChanged(); } }
+    void setTwoFingerRotate(bool v) { if (m_twoFingerRotate != v) { m_twoFingerRotate = v; Q_EMIT twoFingerRotateChanged(); } }
 
 Q_SIGNALS:
     void colorSchemeChanged();
@@ -55,6 +58,7 @@ Q_SIGNALS:
     void pinchZoomChanged();
     void tapToClickChanged();
     void twoFingerRightClickChanged();
+    void twoFingerRotateChanged();
 
 private:
     QString m_colorScheme = QStringLiteral("system");
@@ -66,6 +70,7 @@ private:
     bool m_pinchZoom = true;
     bool m_tapToClick = true;
     bool m_twoFingerRightClick = true;
+    bool m_twoFingerRotate = true;
 };
 
 } // namespace PlasmaTP

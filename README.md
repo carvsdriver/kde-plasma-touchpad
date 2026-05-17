@@ -12,6 +12,7 @@ The Yoga Book 9 has a second screen on the bottom half. When the keyboard dock i
 - **Two-finger scroll** — vertical scroll with configurable speed
 - **Two-finger tap** — right click
 - **Two-finger pinch/spread** — Ctrl+Wheel (application zoom)
+- **Two-finger rotate** — REL_DIAL events (understood by audio knobs, drawing apps, etc.)
 - **Three-finger horizontal swipe** — Ctrl+Alt+Left/Right (KDE virtual desktop switching)
 - **Screen rotation suppression** — pauses `rotate-screens.sh` while the touchpad is active
 - **Window management** — moves windows from the bottom screen to the top screen while the touchpad is active, and restores them on deactivation
@@ -69,6 +70,7 @@ Settings are stored in `~/.config/plasma-touchpadrc` under `[Touchpad]`.
 | `buttonCount` | int | 3 | Physical button strip: 0 = none, 1 / 2 / 3 = buttons |
 | `tapToClick` | bool | true | Single-finger tap → left click |
 | `twoFingerRightClick` | bool | true | Two-finger tap → right click |
+| `twoFingerRotate` | bool | true | Two-finger rotate → REL_DIAL |
 | `pinchZoom` | bool | true | Pinch/spread → Ctrl+Wheel |
 | `threeFingerSwipe` | bool | true | Three-finger horizontal swipe → virtual desktop switch |
 | `disableRotation` | bool | true | Pause screen rotation script while touchpad is active |

@@ -17,6 +17,7 @@ struct Settings {
     bool pinchZoom = true;
     bool tapToClick = true;
     bool twoFingerRightClick = true;
+    bool twoFingerRotate = true;
 
     static constexpr const char *configFile() { return "plasma-touchpadrc"; }
     static constexpr const char *groupName() { return "Touchpad"; }

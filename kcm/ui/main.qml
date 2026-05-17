@@ -98,6 +98,12 @@ KCM.SimpleKCM {
             onToggled: { kcm.twoFingerRightClick = checked; kcm.needsSave = true }
         }
 
+        QQC2.CheckBox {
+            Kirigami.FormData.label: i18n("Two-finger rotate (REL_DIAL)")
+            checked: kcm.twoFingerRotate
+            onToggled: { kcm.twoFingerRotate = checked; kcm.needsSave = true }
+        }
+
         Kirigami.Separator {
             Kirigami.FormData.label: i18n("Gestures")
             Kirigami.FormData.isSection: true

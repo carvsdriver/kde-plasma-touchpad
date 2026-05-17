@@ -33,6 +33,7 @@ void KCMTouchpad::load()
     setPinchZoom(grp.readEntry("pinchZoom", s.pinchZoom));
     setTapToClick(grp.readEntry("tapToClick", s.tapToClick));
     setTwoFingerRightClick(grp.readEntry("twoFingerRightClick", s.twoFingerRightClick));
+    setTwoFingerRotate(grp.readEntry("twoFingerRotate", s.twoFingerRotate));
     setNeedsSave(false);
 }
 
@@ -49,6 +50,7 @@ void KCMTouchpad::save()
     grp.writeEntry("pinchZoom", m_pinchZoom);
     grp.writeEntry("tapToClick", m_tapToClick);
     grp.writeEntry("twoFingerRightClick", m_twoFingerRightClick);
+    grp.writeEntry("twoFingerRotate", m_twoFingerRotate);
     cfg.sync();
     setNeedsSave(false);
 
@@ -71,6 +73,7 @@ void KCMTouchpad::defaults()
     setPinchZoom(s.pinchZoom);
     setTapToClick(s.tapToClick);
     setTwoFingerRightClick(s.twoFingerRightClick);
+    setTwoFingerRotate(s.twoFingerRotate);
     setNeedsSave(true);
 }
 

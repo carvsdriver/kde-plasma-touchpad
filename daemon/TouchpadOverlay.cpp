@@ -233,6 +233,7 @@ void TouchpadOverlay::applySettings(const Settings &s)
     m_touch->setPinchZoom(s.pinchZoom);
     m_touch->setTapToClick(s.tapToClick);
     m_touch->setTwoFingerRightClick(s.twoFingerRightClick);
+    m_touch->setTwoFingerRotate(s.twoFingerRotate);
     setRotationSuppressed(s.disableRotation && m_view != nullptr);
 }
 

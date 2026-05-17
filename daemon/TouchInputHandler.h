@@ -24,6 +24,7 @@ public:
     void setPinchZoom(bool enabled) { m_pinchZoomEnabled = enabled; }
     void setTapToClick(bool enabled) { m_tapToClickEnabled = enabled; }
     void setTwoFingerRightClick(bool enabled) { m_twoFingerRightClickEnabled = enabled; }
+    void setTwoFingerRotate(bool enabled) { m_rotateEnabled = enabled; }
 
     bool start();
     void stop();
@@ -43,6 +44,7 @@ private:
     void emitSync();
     void switchDesktop(int direction);
     void emitCtrlScroll(int hiResUnits);
+    void emitDial(int ticks);
 
     struct Slot {
         int id = -1;
@@ -69,6 +71,7 @@ private:
     bool m_pinchZoomEnabled = true;
     bool m_tapToClickEnabled = true;
     bool m_twoFingerRightClickEnabled = true;
+    bool m_rotateEnabled = true;
     int m_peakActiveCount = 0;
     int m_twoFingerCleanLiftCount = 0;
 
@@ -100,6 +103,7 @@ private:
     int m_swipeAccumX = 0;
     bool m_swipeFired = false;
     double m_pinchAccum = 0.0;
+    double m_rotateAccum = 0.0;
 };
 
 } // namespace PlasmaTP

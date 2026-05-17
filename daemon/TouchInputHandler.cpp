@@ -141,6 +141,7 @@ bool TouchInputHandler::openUinput()
     uinputSetBit(m_uinputFd, UI_SET_RELBIT, REL_Y);
     uinputSetBit(m_uinputFd, UI_SET_RELBIT, REL_WHEEL);
     uinputSetBit(m_uinputFd, UI_SET_RELBIT, REL_WHEEL_HI_RES);
+    uinputSetBit(m_uinputFd, UI_SET_RELBIT, REL_DIAL);
 
     uinput_setup usetup{};
     usetup.id.bustype = BUS_VIRTUAL;
@@ -320,6 +321,7 @@ void TouchInputHandler::processSyncReport()
         m_swipeAccumX = 0;
         m_swipeFired = false;
         m_pinchAccum = 0.0;
+        m_rotateAccum = 0.0;
         m_peakActiveCount = 0;
         m_twoFingerCleanLiftCount = 0;
     }
@@ -466,6 +468,31 @@ void TouchInputHandler::processSyncReport()
         }
     }
 
+    // ── 2-finger rotate ──
+    if (activeCount == 2 && m_rotateEnabled && m_gestureLiftedCount == 0 &&
+        secondarySlot >= 0 && !secondaryIsButton) {
+        const Slot &s2 = m_slots[secondarySlot];
+        if (!s.firstMove && !s2.firstMove) {
+            const double prevAngle = std::atan2(
+                double(s.prevY - s2.prevY), double(s.prevX - s2.prevX));
+            const double currAngle = std::atan2(
+                double(s.y - s2.y), double(s.x - s2.x));
+            double angleDelta = currAngle - prevAngle;
+            // Normalise to [-π, π] to handle the ±π wrap.
+            if (angleDelta > M_PI)  angleDelta -= 2.0 * M_PI;
+            if (angleDelta < -M_PI) angleDelta += 2.0 * M_PI;
+            // Dead-zone: discard sub-noise angular jitter (~0.3° per frame).
+            if (std::abs(angleDelta) > 0.005) {
+                m_rotateAccum += angleDelta * (180.0 / M_PI);
+                const int ticks = static_cast<int>(m_rotateAccum);
+                if (ticks != 0) {
+                    emitDial(ticks);
+                    m_rotateAccum -= ticks;
+                }
+            }
+        }
+    }
+
     // ── 3-finger desktop switch ──
     if (activeCount == 3 && m_threeFingerSwipeEnabled && m_gestureLiftedCount == 0 && !m_swipeFired) {
         int totalDX = 0;
@@ -587,6 +614,16 @@ void TouchInputHandler::emitCtrlScroll(int hiResUnits)
     emitSync();
 
     ev.type = EV_KEY; ev.code = KEY_LEFTCTRL; ev.value = 0;
+    ::write(m_uinputFd, &ev, sizeof(ev));
+    emitSync();
+}
+
+void TouchInputHandler::emitDial(int ticks)
+{
+    input_event ev{};
+    ev.type = EV_REL;
+    ev.code = REL_DIAL;
+    ev.value = ticks;
     ::write(m_uinputFd, &ev, sizeof(ev));
     emitSync();
 }

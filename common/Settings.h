@@ -10,7 +10,7 @@ namespace PlasmaTP {
 struct Settings {
     int buttonCount = 3;
     QString colorScheme = QStringLiteral("system");
-    double pointerSpeed = 1.0;
+    double pointerSpeed = 0.3;
     double scrollSpeed = 1.0;
     bool disableRotation = true;
     bool threeFingerSwipe = true;

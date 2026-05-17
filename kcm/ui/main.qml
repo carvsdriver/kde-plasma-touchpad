@@ -45,7 +45,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Pointer speed")
             QQC2.Slider {
                 id: pointerSlider
-                from: 0.1; to: 5.0; stepSize: 0.1
+                from: 0.1; to: 2.0; stepSize: 0.1
                 value: kcm.pointerSpeed
                 onMoved: { kcm.pointerSpeed = value; kcm.needsSave = true }
                 Layout.preferredWidth: 200
@@ -57,7 +57,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Scroll speed")
             QQC2.Slider {
                 id: scrollSlider
-                from: 0.1; to: 5.0; stepSize: 0.1
+                from: 0.1; to: 2.0; stepSize: 0.1
                 value: kcm.scrollSpeed
                 onMoved: { kcm.scrollSpeed = value; kcm.needsSave = true }
                 Layout.preferredWidth: 200

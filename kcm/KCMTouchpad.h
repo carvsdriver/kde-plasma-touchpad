@@ -59,7 +59,7 @@ Q_SIGNALS:
 private:
     QString m_colorScheme = QStringLiteral("system");
     int m_buttonCount = 3;
-    double m_pointerSpeed = 1.0;
+    double m_pointerSpeed = 0.3;
     double m_scrollSpeed = 1.0;
     bool m_disableRotation = true;
     bool m_threeFingerSwipe = true;

@@ -11,14 +11,14 @@ The Yoga Book 9 has a second screen on the bottom half. When the keyboard dock i
 - **Physical button strip** — configurable 0 / 1 / 2 / 3-button layout along the bottom edge
 - **Two-finger scroll** — vertical scroll with configurable speed
 - **Two-finger tap** — right click
-- **Two-finger double-tap** — smart zoom (KEY_ZOOM)
-- **Pinch to zoom** — spread/pinch emits Ctrl+Wheel
-- **Two-finger rotate** — detected and reserved for future mapping
-- **Two-finger horizontal swipe** — KEY_BACK / KEY_FORWARD (browser / file manager navigation)
-- **Four-finger horizontal swipe** — Ctrl+Alt+Left/Right (KDE desktop switching)
-- **Auto-activation** — detects keyboard dock position via the `yb9-kbdock` driver and activates/deactivates automatically
-- **Panel management** — optionally moves taskbar panels to the top screen while the touchpad is active
-- **Colour scheme** — follow system, force light, or force dark for the touchpad overlay
+- **Two-finger pinch/spread** — Ctrl+Wheel (application zoom)
+- **Three-finger horizontal swipe** — Ctrl+Alt+Left/Right (KDE virtual desktop switching)
+- **Screen rotation suppression** — pauses `rotate-screens.sh` while the touchpad is active
+- **Window management** — moves windows from the bottom screen to the top screen while the touchpad is active, and restores them on deactivation
+- **Panel management** — moves taskbar panels to the top screen while the touchpad is active
+- **Virtual keyboard suppression** — disables the KWin OSK while the touchpad overlay is visible
+- **Auto-activation** — detects keyboard dock position via the `yb9-kbdock` driver
+- **Live colour scheme** — overlay tracks KDE colour scheme changes in real time; can also be forced light or dark
 - **System Settings KCM** — all options configurable under *Input Devices → On-Screen Touchpad*
 
 ## Requirements
@@ -64,20 +64,15 @@ Settings are stored in `~/.config/plasma-touchpadrc` under `[Touchpad]`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `pointerSpeed` | double | 0.5 | Cursor speed multiplier (0.1 – 5.0) |
-| `scrollSpeed` | double | 1.0 | Scroll speed multiplier (0.1 – 5.0) |
+| `pointerSpeed` | double | 0.3 | Cursor speed multiplier (0.1 – 2.0) |
+| `scrollSpeed` | double | 1.0 | Scroll speed multiplier (0.1 – 2.0) |
+| `buttonCount` | int | 3 | Physical button strip: 0 = none, 1 / 2 / 3 = buttons |
 | `tapToClick` | bool | true | Single-finger tap → left click |
-| `buttonCount` | int | 3 | Physical button strip: 0 = none, 1/2/3 = buttons |
+| `twoFingerRightClick` | bool | true | Two-finger tap → right click |
+| `pinchZoom` | bool | true | Pinch/spread → Ctrl+Wheel |
+| `threeFingerSwipe` | bool | true | Three-finger horizontal swipe → virtual desktop switch |
+| `disableRotation` | bool | true | Pause screen rotation script while touchpad is active |
 | `colorScheme` | string | system | Overlay theme: `system`, `light`, `dark` |
-| `activateOnMask` | int | 3 | Bitmask: bit 0 = top-half dock, bit 1 = bottom-half dock |
-| `movePanels` | bool | true | Move panels to top screen when touchpad is active |
-| `gestureRightClick` | bool | true | Two-finger tap → right click |
-| `gestureSmartZoom` | bool | true | Two-finger double-tap → KEY_ZOOM |
-| `gestureScroll` | bool | true | Two-finger vertical scroll |
-| `gesturePinchZoom` | bool | true | Pinch → Ctrl+Wheel |
-| `gestureRotate` | bool | true | Two-finger rotate (reserved) |
-| `gestureSwipePages` | bool | true | Two-finger horizontal swipe → Back / Forward |
-| `gestureSwipeDesktops` | bool | true | Four-finger horizontal swipe → Ctrl+Alt+Arrow |
 
 ## License
 

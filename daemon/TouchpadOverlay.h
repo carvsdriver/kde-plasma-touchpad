@@ -53,6 +53,7 @@ private Q_SLOTS:
 private:
     QRectF overlayRect(DockPosition position) const;
     void applySettings(const Settings &s);
+    void enforceClamshellRotation();
     void setRotationSuppressed(bool suppress);
     void setVirtualKeyboardEnabled(bool enabled);
     void watchVirtualKeyboard();

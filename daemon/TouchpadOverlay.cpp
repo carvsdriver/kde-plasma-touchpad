@@ -108,10 +108,46 @@ QRectF TouchpadOverlay::overlayRect(DockPosition position) const
     }
 }
 
+void TouchpadOverlay::enforceClamshellRotation()
+{
+    // In tent mode kscreen positions both screens at (0,0).  A LayerShell
+    // surface pinned to eDP-2 then spans both physical displays because KWin
+    // sees them as co-located.  Detect the overlap and force the normal
+    // clamshell layout — eDP-1 inverted at (0,0), eDP-2 none at (0,1125) —
+    // before any surfaces are created.
+    QScreen *edp1 = nullptr;
+    QScreen *edp2 = nullptr;
+    for (QScreen *s : QGuiApplication::screens()) {
+        if (s->name() == QStringLiteral("eDP-1"))
+            edp1 = s;
+        else if (s->name() == QLatin1String(BOTTOM_SCREEN))
+            edp2 = s;
+    }
+
+    if (!edp1 || !edp2)
+        return;
+    if (edp1->geometry().topLeft() != edp2->geometry().topLeft())
+        return; // screens already non-overlapping
+
+    qDebug() << "TouchpadOverlay: screens overlap (tent mode); forcing clamshell rotation";
+    QProcess::execute(QStringLiteral("kscreen-doctor"), {
+        QStringLiteral("output.eDP-1.rotation.inverted"),
+        QStringLiteral("output.eDP-1.position.0,0"),
+        QStringLiteral("output.eDP-2.rotation.none"),
+        QStringLiteral("output.eDP-2.position.0,1125")
+    });
+    // Allow Qt to receive and process the Wayland output-reconfiguration
+    // events so QScreen::geometry() reflects the new layout before we
+    // query it and create the LayerShell surface.
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 300);
+}
+
 void TouchpadOverlay::show(DockPosition position)
 {
     if (m_view)
         hide();
+
+    enforceClamshellRotation();
 
     // Find the bottom screen
     QScreen *targetScreen = nullptr;

@@ -23,7 +23,7 @@ DockWatcher::DockWatcher(QObject *parent)
     // during dock insertion; without debounce the overlay flickers.
     m_debounceTimer = new QTimer(this);
     m_debounceTimer->setSingleShot(true);
-    m_debounceTimer->setInterval(400);
+    m_debounceTimer->setInterval(150);
     connect(m_debounceTimer, &QTimer::timeout, this, [this]() {
         setPosition(m_pendingPosition);
     });

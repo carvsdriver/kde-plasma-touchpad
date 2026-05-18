@@ -12,6 +12,7 @@ Item {
     // Set by TouchpadOverlay via rootObject()->setProperty() — fully reactive.
     property int buttonCount: 3
     property string colorScheme: "system"
+    property int pressedButtonIndex: -1
 
     // ── Colour scheme ───────────────────────────────────────────────────────
     // Kirigami.Theme is bound to KDE's color scheme system and updates live
@@ -114,21 +115,17 @@ Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
 
-                        color: mouseArea.pressed ? root.btnHighlight : root.btnBg
+                        readonly property bool isPressed: index === root.pressedButtonIndex
+
+                        color: isPressed ? root.btnHighlight : root.btnBg
                         border.color: root.borderColor
                         border.width: 1
 
                         Text {
                             anchors.centerIn: parent
                             text: modelData.label
-                            color: mouseArea.pressed ? root.btnHighlightText : root.btnText
+                            color: parent.isPressed ? root.btnHighlightText : root.btnText
                             font.pixelSize: 14
-                        }
-
-                        MouseArea {
-                            id: mouseArea
-                            anchors.fill: parent
-                            // Visual feedback only — clicks come from TouchInputHandler via uinput
                         }
                     }
                 }

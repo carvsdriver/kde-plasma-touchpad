@@ -1,0 +1,12 @@
+[Unit]
+Description=Yoga Book 9 On-Screen Touchpad Daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=@KDE_INSTALL_FULL_LIBEXECDIR@/plasma-touchpad-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

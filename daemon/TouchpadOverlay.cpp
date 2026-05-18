@@ -8,6 +8,7 @@
 #include <QQuickItem>
 #include <QQuickView>
 #include <QScreen>
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QUrl>
 #include <QDBusConnection>
@@ -52,6 +53,28 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     , m_windows(new WindowMover(this))
     , m_panels(new PanelMover(this))
 {
+    connect(m_touch, &TouchInputHandler::deviceError,
+            this, []() { QCoreApplication::exit(1); });
+
+    // Button strip visual feedback: highlight on press, clear 150 ms after
+    // release so taps are visible even though press+release arrive in one frame.
+    m_buttonHighlightTimer = new QTimer(this);
+    m_buttonHighlightTimer->setSingleShot(true);
+    m_buttonHighlightTimer->setInterval(150);
+    connect(m_buttonHighlightTimer, &QTimer::timeout, this, [this]() {
+        if (m_view && m_view->rootObject())
+            m_view->rootObject()->setProperty("pressedButtonIndex", -1);
+    });
+    connect(m_touch, &TouchInputHandler::buttonHighlightChanged, this, [this](int idx) {
+        if (!m_view || !m_view->rootObject()) return;
+        if (idx >= 0) {
+            m_buttonHighlightTimer->stop();
+            m_view->rootObject()->setProperty("pressedButtonIndex", idx);
+        } else {
+            m_buttonHighlightTimer->start();
+        }
+    });
+
     watchVirtualKeyboard();
 
     QDBusConnection::sessionBus().connect(

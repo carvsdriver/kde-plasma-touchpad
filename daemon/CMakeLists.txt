@@ -35,12 +35,7 @@ target_include_directories(plasma-touchpad-daemon PRIVATE ${CMAKE_CURRENT_SOURCE
 
 install(TARGETS plasma-touchpad-daemon DESTINATION ${KDE_INSTALL_LIBEXECDIR})
 
-# Autostart entry so the daemon launches with the Plasma session.
-# KDE_INSTALL_AUTOSTARTDIR may be empty depending on ECM version; fall back to
-# the standard XDG autostart path.
-if(KDE_INSTALL_AUTOSTARTDIR)
-    set(_autostart_dir "${KDE_INSTALL_AUTOSTARTDIR}")
-else()
-    set(_autostart_dir "${CMAKE_INSTALL_PREFIX}/etc/xdg/autostart")
-endif()
-install(FILES plasma-touchpad.desktop DESTINATION "${_autostart_dir}")
+# systemd user service — handles startup and automatic restart on resume/crash.
+configure_file(plasma-touchpad.service.in plasma-touchpad.service @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/plasma-touchpad.service"
+        DESTINATION "${KDE_INSTALL_SYSTEMDUSERUNITDIR}")

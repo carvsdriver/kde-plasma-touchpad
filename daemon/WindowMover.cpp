@@ -66,6 +66,17 @@ void WindowMover::moveWindowsToTopScreen()
             console.warn("plasma-touchpad WindowMover: eDP-1 not at expected position");
         } else {
             var savedActive = workspace.activeWindow;
+            // Minimize the active window before moving so KWin issues
+            // wl_keyboard::leave before the output transition.  Without this,
+            // sendClientToScreen (which is async) races with the active-window
+            // assignment and the window lands on eDP-1 without a fresh
+            // wl_keyboard::enter, leaving it visually focused but unresponsive.
+            // All three operations (minimize, move, restore) are queued in one
+            // script execution before any frame renders, so there is no
+            // visible animation.
+            var needsRestore = (savedActive && savedActive.normalWindow &&
+                                savedActive.output && savedActive.output.name === "eDP-2");
+            if (needsRestore) savedActive.minimized = true;
             var firstMoved = null;
             var wl = workspace.windowList();
             for (var i = 0; i < wl.length; i++) {
@@ -80,10 +91,7 @@ void WindowMover::moveWindowsToTopScreen()
                 workspace.sendClientToScreen(w, outTop);
                 if (!firstMoved) firstMoved = w;
             }
-            // sendClientToScreen moves the window but does not re-focus it,
-            // leaving it unable to receive keyboard input.  Explicitly activate
-            // the window that was focused before the move (if it was on eDP-2),
-            // or fall back to the first window we moved.
+            if (needsRestore) savedActive.minimized = false;
             if (savedActive && savedActive.normalWindow && firstMoved) {
                 workspace.activeWindow = savedActive;
             } else if (firstMoved) {
@@ -95,7 +103,7 @@ void WindowMover::moveWindowsToTopScreen()
     runKWinScript(script);
 
     // Allow the async callDBus messages from the KWin script to arrive.
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 200);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
 
     qDebug() << "WindowMover: moved" << m_movedWindowIds.size()
              << "windows to eDP-1:" << m_movedWindowIds;

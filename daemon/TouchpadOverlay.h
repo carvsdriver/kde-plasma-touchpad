@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QRectF>
+#include <QTimer>
 
 namespace LayerShellQt { class Window; }
 class QQuickView;
@@ -67,6 +68,8 @@ private:
     // Bottom screen resolution — read at first show() from QScreen
     int m_screenW = 2880;
     int m_screenH = 1800;
+
+    QTimer *m_buttonHighlightTimer = nullptr;
 };
 
 } // namespace PlasmaTP

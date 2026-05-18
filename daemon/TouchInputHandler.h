@@ -29,6 +29,13 @@ public:
     bool start();
     void stop();
 
+Q_SIGNALS:
+    void deviceError();
+    void buttonHighlightChanged(int buttonIndex); // -1 = no highlight
+
+public:
+    enum class TwoFingerGesture { None, Scroll, Pinch, Rotate, Drag };
+
 private Q_SLOTS:
     void touchReadyRead(int fd);
 
@@ -104,6 +111,9 @@ private:
     bool m_swipeFired = false;
     double m_pinchAccum = 0.0;
     double m_rotateAccum = 0.0;
+
+    TwoFingerGesture m_twoFingerGesture = TwoFingerGesture::None;
+    bool m_dragButtonHeld = false;
 };
 
 } // namespace PlasmaTP

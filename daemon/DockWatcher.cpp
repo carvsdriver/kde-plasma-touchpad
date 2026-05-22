@@ -2,8 +2,6 @@
 
 #include <QDir>
 #include <QFile>
-#include <QSocketNotifier>
-#include <QTimer>
 #include <QDebug>
 
 #include <fcntl.h>
@@ -18,7 +16,7 @@ static constexpr const char *KBDOCK_INPUT_NAME = "Lenovo Yoga Book 9 keyboard do
 DockWatcher::DockWatcher(QObject *parent)
     : QObject(parent)
 {
-    // Debounce timer: position changes are only committed after 400 ms of
+    // Debounce timer: position changes are only committed after 150 ms of
     // stability.  The kbdock driver fires multiple SW_TABLET_MODE events
     // during dock insertion; without debounce the overlay flickers.
     m_debounceTimer = new QTimer(this);

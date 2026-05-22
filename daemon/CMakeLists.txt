@@ -22,7 +22,6 @@ qt_add_qml_module(plasma-touchpad-daemon
 target_link_libraries(plasma-touchpad-daemon PRIVATE
     Qt6::Core
     Qt6::Gui
-    Qt6::GuiPrivate
     Qt6::Quick
     Qt6::DBus
     KF6::ConfigCore

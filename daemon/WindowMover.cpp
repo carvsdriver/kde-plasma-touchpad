@@ -6,7 +6,6 @@
 #include <QDBusReply>
 #include <QDebug>
 #include <QFile>
-#include <QTextStream>
 
 namespace PlasmaTP {
 
@@ -173,7 +172,7 @@ void WindowMover::runKWinScript(const QString &scriptContent)
             qWarning() << "WindowMover: cannot write script file" << SCRIPT_FILE;
             return;
         }
-        QTextStream((&f)) << scriptContent;
+        f.write(scriptContent.toUtf8());
     }
 
     QDBusInterface kwin(QLatin1String(KWIN_SERVICE),

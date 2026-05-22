@@ -14,8 +14,7 @@ include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 include(FeatureSummary)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Widgets DBus)
-find_package(Qt6GuiPrivate REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick DBus)
 find_package(KF6 REQUIRED COMPONENTS
     Config       # provides KF6::ConfigCore
     CoreAddons
@@ -24,9 +23,6 @@ find_package(KF6 REQUIRED COMPONENTS
     WindowSystem
 )
 find_package(LayerShellQt REQUIRED)
-find_package(WaylandScanner REQUIRED)
-find_package(WaylandProtocols REQUIRED)
-find_package(Wayland REQUIRED COMPONENTS Client)
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
 

@@ -8,7 +8,6 @@
 #include <QQuickItem>
 #include <QQuickView>
 #include <QScreen>
-#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QUrl>
 #include <QDBusConnection>
@@ -44,6 +43,7 @@ static Settings loadFromConfig()
     s.pinchZoom = grp.readEntry("pinchZoom", s.pinchZoom);
     s.tapToClick = grp.readEntry("tapToClick", s.tapToClick);
     s.twoFingerRightClick = grp.readEntry("twoFingerRightClick", s.twoFingerRightClick);
+    s.invertScroll = grp.readEntry("invertScroll", s.invertScroll);
     return s;
 }
 
@@ -74,6 +74,10 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
             m_buttonHighlightTimer->start();
         }
     });
+
+    m_showTimer = new QTimer(this);
+    m_showTimer->setSingleShot(true);
+    connect(m_showTimer, &QTimer::timeout, this, &TouchpadOverlay::createOverlayImpl);
 
     watchVirtualKeyboard();
 
@@ -108,13 +112,8 @@ QRectF TouchpadOverlay::overlayRect(DockPosition position) const
     }
 }
 
-void TouchpadOverlay::enforceClamshellRotation()
+bool TouchpadOverlay::isInTentMode() const
 {
-    // In tent mode kscreen positions both screens at (0,0).  A LayerShell
-    // surface pinned to eDP-2 then spans both physical displays because KWin
-    // sees them as co-located.  Detect the overlap and force the normal
-    // clamshell layout — eDP-1 inverted at (0,0), eDP-2 none at (0,1125) —
-    // before any surfaces are created.
     QScreen *edp1 = nullptr;
     QScreen *edp2 = nullptr;
     for (QScreen *s : QGuiApplication::screens()) {
@@ -123,32 +122,42 @@ void TouchpadOverlay::enforceClamshellRotation()
         else if (s->name() == QLatin1String(BOTTOM_SCREEN))
             edp2 = s;
     }
-
-    if (!edp1 || !edp2)
-        return;
-    if (edp1->geometry().topLeft() != edp2->geometry().topLeft())
-        return; // screens already non-overlapping
-
-    qDebug() << "TouchpadOverlay: screens overlap (tent mode); forcing clamshell rotation";
-    QProcess::execute(QStringLiteral("kscreen-doctor"), {
-        QStringLiteral("output.eDP-1.rotation.inverted"),
-        QStringLiteral("output.eDP-1.position.0,0"),
-        QStringLiteral("output.eDP-2.rotation.none"),
-        QStringLiteral("output.eDP-2.position.0,1125")
-    });
-    // Allow Qt to receive and process the Wayland output-reconfiguration
-    // events so QScreen::geometry() reflects the new layout before we
-    // query it and create the LayerShell surface.
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 300);
+    return edp1 && edp2 && edp1->geometry().topLeft() == edp2->geometry().topLeft();
 }
 
 void TouchpadOverlay::show(DockPosition position)
 {
+    // Destroy any existing overlay before doing anything with screens.
+    // This ensures no QWaylandWindow is alive when kscreen-doctor triggers
+    // Wayland output-reconfiguration events — those events call
+    // updateBufferTransform() which dereferences QWindow::screen(), and if
+    // screen() is transiently null during the compositor reconfiguration the
+    // process SEGVs.
     if (m_view)
         hide();
 
-    enforceClamshellRotation();
+    m_pendingPosition = position;
 
+    if (isInTentMode()) {
+        // In tent mode both screens share the same origin; force clamshell
+        // layout without blocking.  Defer window creation so the Wayland
+        // output events from kscreen-doctor arrive while no window exists.
+        qDebug() << "TouchpadOverlay: screens overlap (tent mode); forcing clamshell rotation";
+        QProcess::execute(QStringLiteral("kscreen-doctor"), {
+            QStringLiteral("output.eDP-1.rotation.inverted"),
+            QStringLiteral("output.eDP-1.position.0,0"),
+            QStringLiteral("output.eDP-2.rotation.none"),
+            QStringLiteral("output.eDP-2.position.0,1125")
+        });
+        m_showTimer->start(400);
+        return;
+    }
+
+    createOverlayImpl();
+}
+
+void TouchpadOverlay::createOverlayImpl()
+{
     // Find the bottom screen
     QScreen *targetScreen = nullptr;
     for (QScreen *s : QGuiApplication::screens()) {
@@ -234,7 +243,7 @@ void TouchpadOverlay::show(DockPosition position)
 
     // TopHalf dock  → overlay on bottom half → anchor bottom
     // BottomHalf dock → overlay on top half  → anchor top
-    const bool overlayOnTop = (position == DockPosition::BottomHalf);
+    const bool overlayOnTop = (m_pendingPosition == DockPosition::BottomHalf);
     LayerShellQt::Window::Anchor vertAnchor = overlayOnTop
         ? LayerShellQt::Window::AnchorTop
         : LayerShellQt::Window::AnchorBottom;
@@ -242,8 +251,8 @@ void TouchpadOverlay::show(DockPosition position)
         LayerShellQt::Window::AnchorLeft |
         LayerShellQt::Window::AnchorRight |
         vertAnchor));
-    const int trim = (position == DockPosition::BottomHalf) ? OVERLAY_TRIM_BOTTOM_HALF
-                                                              : OVERLAY_TRIM_TOP_HALF;
+    const int trim = (m_pendingPosition == DockPosition::BottomHalf) ? OVERLAY_TRIM_BOTTOM_HALF
+                                                                     : OVERLAY_TRIM_TOP_HALF;
     m_layerWindow->setDesiredSize(QSize(0, m_screenH / 2 - trim));
 
     connect(m_view, &QWindow::screenChanged, this, [this](QScreen *s) {
@@ -267,7 +276,7 @@ void TouchpadOverlay::show(DockPosition position)
 
     m_view->show();
 
-    const QRectF touchRect = overlayRect(position);
+    const QRectF touchRect = overlayRect(m_pendingPosition);
     m_touch->setScreenSize(m_screenW, m_screenH);
     m_touch->setTouchpadRect(touchRect);
     applySettings(s);
@@ -275,7 +284,7 @@ void TouchpadOverlay::show(DockPosition position)
         qWarning() << "TouchpadOverlay: failed to start touch input handler";
 
     qDebug() << "TouchpadOverlay: shown on" << BOTTOM_SCREEN
-             << "position" << static_cast<int>(position)
+             << "position" << static_cast<int>(m_pendingPosition)
              << "touchRect" << touchRect;
 }
 
@@ -293,6 +302,7 @@ void TouchpadOverlay::applySettings(const Settings &s)
     m_touch->setTapToClick(s.tapToClick);
     m_touch->setTwoFingerRightClick(s.twoFingerRightClick);
     m_touch->setTwoFingerRotate(s.twoFingerRotate);
+    m_touch->setInvertScroll(s.invertScroll);
     setRotationSuppressed(s.disableRotation && m_view != nullptr);
 }
 

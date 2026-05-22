@@ -53,7 +53,8 @@ private Q_SLOTS:
 private:
     QRectF overlayRect(DockPosition position) const;
     void applySettings(const Settings &s);
-    void enforceClamshellRotation();
+    bool isInTentMode() const;
+    void createOverlayImpl();
     void setRotationSuppressed(bool suppress);
     void setVirtualKeyboardEnabled(bool enabled);
     void watchVirtualKeyboard();
@@ -71,6 +72,8 @@ private:
     int m_screenH = 1800;
 
     QTimer *m_buttonHighlightTimer = nullptr;
+    QTimer *m_showTimer = nullptr;
+    DockPosition m_pendingPosition = DockPosition::Detached;
 };
 
 } // namespace PlasmaTP

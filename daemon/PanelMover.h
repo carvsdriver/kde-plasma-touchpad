@@ -13,10 +13,9 @@ namespace PlasmaTP {
  * Plasma panels are identified by their containment ID and screen index.
  * We use the plasmashell DBus scripting interface to enumerate and relocate them.
  *
- * Screen index mapping (KScreen order, confirmed at runtime):
- *   Screen 0 = eDP-1 (top screen)
- *   Screen 1 = eDP-2 (bottom screen)
- * These are confirmed dynamically via the scripting API before acting.
+ * Screen index mapping (confirmed via screenGeometry() at runtime):
+ *   Screen 0 = eDP-2 (bottom screen, y=1125)
+ *   Screen 1 = eDP-1 (top screen,    y=0)
  */
 class PanelMover : public QObject
 {

@@ -65,6 +65,12 @@ KCM.SimpleKCM {
             QQC2.Label { text: scrollSlider.value.toFixed(1) + "×" }
         }
 
+        QQC2.CheckBox {
+            Kirigami.FormData.label: i18n("Invert scroll direction")
+            checked: kcm.invertScroll
+            onToggled: { kcm.invertScroll = checked; kcm.needsSave = true }
+        }
+
         Kirigami.Separator {
             Kirigami.FormData.label: i18n("Buttons and Tap")
             Kirigami.FormData.isSection: true

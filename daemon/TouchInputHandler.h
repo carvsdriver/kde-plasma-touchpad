@@ -25,6 +25,7 @@ public:
     void setTapToClick(bool enabled) { m_tapToClickEnabled = enabled; }
     void setTwoFingerRightClick(bool enabled) { m_twoFingerRightClickEnabled = enabled; }
     void setTwoFingerRotate(bool enabled) { m_rotateEnabled = enabled; }
+    void setInvertScroll(bool enabled) { m_invertScroll = enabled; }
 
     bool start();
     void stop();
@@ -32,9 +33,6 @@ public:
 Q_SIGNALS:
     void deviceError();
     void buttonHighlightChanged(int buttonIndex); // -1 = no highlight
-
-public:
-    enum class TwoFingerGesture { None, Scroll, Pinch, Rotate, Drag };
 
 private Q_SLOTS:
     void touchReadyRead(int fd);
@@ -79,6 +77,7 @@ private:
     bool m_tapToClickEnabled = true;
     bool m_twoFingerRightClickEnabled = true;
     bool m_rotateEnabled = true;
+    bool m_invertScroll = false;
     int m_peakActiveCount = 0;
     int m_twoFingerCleanLiftCount = 0;
 
@@ -94,6 +93,12 @@ private:
     // Sub-pixel accumulator for pointer movement (reset per session)
     double m_accumDX = 0.0;
     double m_accumDY = 0.0;
+
+    // One-frame cursor buffer: movement is held for one sync cycle and only
+    // emitted when the finger is confirmed still active the following frame.
+    // This suppresses the noisy penultimate-frame position artifact at lift.
+    int m_pendingCursorDX = 0;
+    int m_pendingCursorDY = 0;
 
     // Hi-res scroll accumulator (reset per session); units: 120 = one traditional tick
     double m_scrollAccum = 0.0;
@@ -112,6 +117,7 @@ private:
     double m_pinchAccum = 0.0;
     double m_rotateAccum = 0.0;
 
+    enum class TwoFingerGesture { None, Scroll, Pinch, Rotate, Drag };
     TwoFingerGesture m_twoFingerGesture = TwoFingerGesture::None;
     bool m_dragButtonHeld = false;
 };

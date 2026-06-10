@@ -36,7 +36,7 @@ static constexpr int    GESTURE_BOTH_MOVING_RAW = 30;
 // Drag (anchor + mover): mover must exceed DRAG_MOVER and the anchor must have
 // traveled less than 1/3 of the mover's cumulative distance.  The ratio check
 // is scale-independent and tolerates natural anchor drift without a fixed floor.
-static constexpr int    GESTURE_DRAG_MOVER_RAW  = 80;
+static constexpr int    GESTURE_DRAG_MOVER_RAW  = 85;
 static constexpr double GESTURE_CLASSIFY_SCROLL = 320.0;  // > 3 × 80 = 240
 static constexpr double GESTURE_CLASSIFY_PINCH  = 2.5;
 static constexpr double GESTURE_CLASSIFY_ROTATE = 8.0;
@@ -553,9 +553,18 @@ void TouchInputHandler::processSyncReport()
                 const int moverDist  = std::max(sDist, s2Dist);
                 if (moverDist >= GESTURE_DRAG_MOVER_RAW && anchorDist * 4 < moverDist) {
                     // One finger barely moved relative to the other → drag-select.
-                    m_twoFingerGesture = TwoFingerGesture::Drag;
-                    emitButton(BTN_LEFT, true);
-                    m_dragButtonHeld = true;
+                    // Also require the anchor to be stationary THIS frame: a recently-
+                    // placed scroll finger that hasn't accumulated cumulative travel yet
+                    // looks like a stationary anchor by distance alone, but its per-frame
+                    // velocity betrays that it is actively moving.
+                    const Slot &anchorSlot = (sDist <= s2Dist) ? s : s2;
+                    const int anchorFrameSpeed = std::abs(anchorSlot.x - anchorSlot.prevX)
+                                               + std::abs(anchorSlot.y - anchorSlot.prevY);
+                    if (anchorFrameSpeed < JITTER_THRESHOLD_RAW) {
+                        m_twoFingerGesture = TwoFingerGesture::Drag;
+                        emitButton(BTN_LEFT, true);
+                        m_dragButtonHeld = true;
+                    }
                 } else if (anchorDist >= GESTURE_BOTH_MOVING_RAW) {
                     // Both fingers genuinely moving → symmetric gestures only.
                     // Scroll requires both fingers moving in the same direction:

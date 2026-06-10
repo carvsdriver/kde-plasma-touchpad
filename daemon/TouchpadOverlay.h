@@ -73,6 +73,7 @@ private:
 
     QTimer *m_buttonHighlightTimer = nullptr;
     QTimer *m_showTimer = nullptr;
+    QTimer *m_touchRetryTimer = nullptr;
     DockPosition m_pendingPosition = DockPosition::Detached;
 };
 

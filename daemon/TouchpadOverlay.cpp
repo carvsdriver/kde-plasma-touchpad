@@ -53,8 +53,11 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     , m_windows(new WindowMover(this))
     , m_panels(new PanelMover(this))
 {
-    connect(m_touch, &TouchInputHandler::deviceError,
-            this, []() { QCoreApplication::exit(1); });
+    connect(m_touch, &TouchInputHandler::deviceError, this, [this]() {
+        qWarning() << "TouchpadOverlay: touch device lost, will restart";
+        m_touch->stop();
+        m_touchRetryTimer->start();
+    }, Qt::QueuedConnection);
 
     // Button strip visual feedback: highlight on press, clear 150 ms after
     // release so taps are visible even though press+release arrive in one frame.
@@ -78,6 +81,24 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     m_showTimer = new QTimer(this);
     m_showTimer->setSingleShot(true);
     connect(m_showTimer, &QTimer::timeout, this, &TouchpadOverlay::createOverlayImpl);
+
+    // Retry timer: if TouchInputHandler::start() fails at first show() (e.g.
+    // the INGENIC device is still in its USB reset sequence), keep retrying
+    // every 2 s until the device appears.  Stopped in hide() so a late retry
+    // cannot reopen devices after teardown.
+    m_touchRetryTimer = new QTimer(this);
+    m_touchRetryTimer->setSingleShot(true);
+    m_touchRetryTimer->setInterval(2000);
+    connect(m_touchRetryTimer, &QTimer::timeout, this, [this]() {
+        if (!m_view)
+            return;
+        if (!m_touch->start()) {
+            qWarning() << "TouchpadOverlay: touch start retry failed, retrying in 2 s";
+            m_touchRetryTimer->start();
+        } else {
+            qDebug() << "TouchpadOverlay: touch input started on retry";
+        }
+    });
 
     watchVirtualKeyboard();
 
@@ -280,8 +301,10 @@ void TouchpadOverlay::createOverlayImpl()
     m_touch->setScreenSize(m_screenW, m_screenH);
     m_touch->setTouchpadRect(touchRect);
     applySettings(s);
-    if (!m_touch->start())
-        qWarning() << "TouchpadOverlay: failed to start touch input handler";
+    if (!m_touch->start()) {
+        qWarning() << "TouchpadOverlay: touch input start failed (device not ready?), retrying in 2 s";
+        m_touchRetryTimer->start();
+    }
 
     qDebug() << "TouchpadOverlay: shown on" << BOTTOM_SCREEN
              << "position" << static_cast<int>(m_pendingPosition)
@@ -320,6 +343,7 @@ void TouchpadOverlay::hide()
     if (!m_view)
         return;
 
+    m_touchRetryTimer->stop();
     m_touch->stop();
     m_touch->setTouchpadRect(QRectF());
     m_windows->restore();

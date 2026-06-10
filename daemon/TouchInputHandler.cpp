@@ -378,6 +378,38 @@ void TouchInputHandler::processSyncReport()
             }
         }
     }
+    // Handle a 1→3 count jump: two fingers arriving in the same sync report while
+    // one is already down skips both the 1→2 and 2→3 re-arms, leaving
+    // m_gestureLiftedCount and m_swipeFired stuck from the previous gesture and
+    // permanently blocking cursor movement and new swipes.
+    if (m_prevActiveCount == 1 && activeCount == 3) {
+        m_gestureLiftedCount = 0;
+        m_swipeFired = false;
+        m_swipeAccumX = 0;
+        m_twoFingerGesture = TwoFingerGesture::None;
+        m_twoFingerCleanLiftCount = 0;
+        m_scrollAccum = 0.0;
+        m_pinchAccum  = 0.0;
+        m_rotateAccum = 0.0;
+        m_pendingCursorDX = 0;
+        m_pendingCursorDY = 0;
+        if (m_dragButtonHeld) {
+            emitButton(BTN_LEFT, false);
+            m_dragButtonHeld = false;
+        }
+        for (int i = 0; i < MAX_SLOTS; ++i) {
+            if (m_slots[i].active) {
+                m_slots[i].startX = m_slots[i].x;
+                m_slots[i].startY = m_slots[i].y;
+            }
+        }
+    }
+    // If a drag-select was active when the 3rd finger arrives, release BTN_LEFT
+    // so it doesn't bleed into the desktop-switch swipe.
+    if (m_prevActiveCount == 2 && activeCount == 3 && m_dragButtonHeld) {
+        emitButton(BTN_LEFT, false);
+        m_dragButtonHeld = false;
+    }
     m_prevActiveCount = activeCount;
     if (activeCount > m_peakActiveCount)
         m_peakActiveCount = activeCount;

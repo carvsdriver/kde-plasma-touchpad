@@ -49,12 +49,29 @@ DockWatcher::~DockWatcher()
 
 DockPosition DockWatcher::readSysfs() const
 {
-    QFile f{QLatin1String(SYSFS_PATH)};
+    // The block driver instance number varies; scan for any matching device.
+    const QDir wmiDevices(QStringLiteral("/sys/bus/wmi/devices"));
+    const auto entries = wmiDevices.entryList(
+        QStringList{QString::fromLatin1(KBDOCK_BLOCK_GUID) + QStringLiteral("-*")},
+        QDir::Dirs);
+
+    QString path;
+    for (const QString &entry : entries) {
+        const QString candidate = wmiDevices.filePath(entry)
+                                  + QStringLiteral("/keyboard_position");
+        if (QFile::exists(candidate)) {
+            path = candidate;
+            break;
+        }
+    }
+    if (path.isEmpty())
+        return DockPosition::Detached;
+
+    QFile f{path};
     if (!f.open(QIODevice::ReadOnly))
         return DockPosition::Detached;
 
     const QByteArray raw = f.readLine().trimmed();
-    // Format: "N (name)" — take the leading digit
     if (raw.isEmpty())
         return DockPosition::Detached;
 

@@ -30,8 +30,9 @@ class DockWatcher : public QObject
     Q_OBJECT
 
 public:
-    static constexpr const char *SYSFS_PATH =
-        "/sys/bus/wmi/devices/806BD2A2-177B-481D-BFB5-3BA0BB4A2285-11/keyboard_position";
+    // GUID of the LENOVO_FEATURE_STATUS_DATA block driver (owns keyboard_position in v9+)
+    static constexpr const char *KBDOCK_BLOCK_GUID =
+        "E7F300FA-21CD-4003-ADAC-2696135982E6";
 
     explicit DockWatcher(QObject *parent = nullptr);
     ~DockWatcher() override;

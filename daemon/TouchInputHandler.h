@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QRectF>
 #include <QSocketNotifier>
+#include <linux/input.h>
 
 namespace PlasmaTP {
 
@@ -50,6 +51,7 @@ private:
     void switchDesktop(int direction);
     void emitCtrlScroll(int hiResUnits);
     void emitDial(int ticks);
+    void writeEv(const input_event &ev);
 
     struct Slot {
         int id = -1;

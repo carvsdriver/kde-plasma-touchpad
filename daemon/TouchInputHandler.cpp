@@ -588,11 +588,11 @@ void TouchInputHandler::processSyncReport()
                     const int hiRes = m_invertScroll ? -raw : raw;
                     input_event ev{};
                     ev.type = EV_REL; ev.code = REL_WHEEL_HI_RES; ev.value = hiRes;
-                    ::write(m_uinputFd, &ev, sizeof(ev));
+                    writeEv(ev);
                     const int fullTicks = hiRes / 120;
                     if (fullTicks != 0) {
                         ev.code = REL_WHEEL; ev.value = fullTicks;
-                        ::write(m_uinputFd, &ev, sizeof(ev));
+                        writeEv(ev);
                     }
                     emitSync();
                     m_scrollAccum -= raw;
@@ -734,11 +734,11 @@ void TouchInputHandler::emitRelative(int dx, int dy)
     input_event ev{};
     if (dx != 0) {
         ev.type = EV_REL; ev.code = REL_X; ev.value = dx;
-        ::write(m_uinputFd, &ev, sizeof(ev));
+        writeEv(ev);
     }
     if (dy != 0) {
         ev.type = EV_REL; ev.code = REL_Y; ev.value = dy;
-        ::write(m_uinputFd, &ev, sizeof(ev));
+        writeEv(ev);
     }
     emitSync();
 }
@@ -749,7 +749,7 @@ void TouchInputHandler::emitButton(int btn, bool press)
     ev.type = EV_KEY;
     ev.code = static_cast<uint16_t>(btn);
     ev.value = press ? 1 : 0;
-    ::write(m_uinputFd, &ev, sizeof(ev));
+    writeEv(ev);
     emitSync();
 }
 
@@ -758,27 +758,27 @@ void TouchInputHandler::emitSync()
     input_event ev{};
     ev.type = EV_SYN;
     ev.code = SYN_REPORT;
-    ::write(m_uinputFd, &ev, sizeof(ev));
+    writeEv(ev);
 }
 
 void TouchInputHandler::emitCtrlScroll(int hiResUnits)
 {
     input_event ev{};
     ev.type = EV_KEY; ev.code = KEY_LEFTCTRL; ev.value = 1;
-    ::write(m_uinputFd, &ev, sizeof(ev));
+    writeEv(ev);
     emitSync();
 
     ev.type = EV_REL; ev.code = REL_WHEEL_HI_RES; ev.value = hiResUnits;
-    ::write(m_uinputFd, &ev, sizeof(ev));
+    writeEv(ev);
     const int ticks = hiResUnits / 120;
     if (ticks != 0) {
         ev.type = EV_REL; ev.code = REL_WHEEL; ev.value = ticks;
-        ::write(m_uinputFd, &ev, sizeof(ev));
+        writeEv(ev);
     }
     emitSync();
 
     ev.type = EV_KEY; ev.code = KEY_LEFTCTRL; ev.value = 0;
-    ::write(m_uinputFd, &ev, sizeof(ev));
+    writeEv(ev);
     emitSync();
 }
 
@@ -788,8 +788,13 @@ void TouchInputHandler::emitDial(int ticks)
     ev.type = EV_REL;
     ev.code = REL_DIAL;
     ev.value = ticks;
-    ::write(m_uinputFd, &ev, sizeof(ev));
+    writeEv(ev);
     emitSync();
+}
+
+void TouchInputHandler::writeEv(const input_event &ev)
+{
+    if (::write(m_uinputFd, &ev, sizeof(ev)) < 0) {}
 }
 
 void TouchInputHandler::switchDesktop(int direction)

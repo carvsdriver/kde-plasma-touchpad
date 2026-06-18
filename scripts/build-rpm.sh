@@ -16,6 +16,7 @@ NAME="plasma-touchpad"
 TARBALL="${NAME}-${VERSION}.tar.gz"
 SOURCES_DIR="${HOME}/rpmbuild/SOURCES"
 RPM_OUT="${HOME}/rpmbuild/RPMS/x86_64/${NAME}-${VERSION}-1.$(rpm --eval '%{dist}' | tr -d '.').x86_64.rpm"
+RELEASES_DIR="${REPO_DIR}/releases"
 
 mkdir -p "${SOURCES_DIR}"
 
@@ -31,8 +32,11 @@ tar czf "${SOURCES_DIR}/${TARBALL}" \
 echo "==> Building RPM..."
 rpmbuild -ba "${SPEC}"
 
+mkdir -p "${RELEASES_DIR}"
+cp "${RPM_OUT}" "${RELEASES_DIR}/"
+
 echo ""
-echo "==> Built: ${RPM_OUT}"
+echo "==> Built: ${RELEASES_DIR}/$(basename "${RPM_OUT}")"
 
 if [[ "${1:-}" == "--install" ]]; then
     echo "==> Installing..."

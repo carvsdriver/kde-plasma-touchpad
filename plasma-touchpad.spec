@@ -58,10 +58,11 @@ movement, scrolling, and gestures via uinput.
 
 %files
 %{_libdir}/libexec/plasma-touchpad-daemon
-%config(noreplace) /etc/xdg/autostart/plasma-touchpad.desktop
-%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasma_touchpad.so
-%{_datadir}/plasma/kcms/kcm_plasma_touchpad.json
-%{_datadir}/applications/kcm_plasma_touchpad.desktop
+/etc/xdg/autostart/plasma-touchpad.desktop
+%{_userunitdir}/plasma-touchpad.service
+%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_yoga9_onscreen_touchpad.so
+%{_datadir}/plasma/kcms/kcm_yoga9_onscreen_touchpad.json
+%{_datadir}/applications/kcm_yoga9_onscreen_touchpad.desktop
 
 %changelog
 * Thu May 14 2026 Dave Carey <carvsdriver@gmail.com> - 0.1.0-1

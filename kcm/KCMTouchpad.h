@@ -15,6 +15,7 @@ class KCMTouchpad : public KQuickConfigModule
     Q_PROPERTY(double scrollSpeed READ scrollSpeed WRITE setScrollSpeed NOTIFY scrollSpeedChanged)
     Q_PROPERTY(bool disableRotation READ disableRotation WRITE setDisableRotation NOTIFY disableRotationChanged)
     Q_PROPERTY(bool threeFingerSwipe READ threeFingerSwipe WRITE setThreeFingerSwipe NOTIFY threeFingerSwipeChanged)
+    Q_PROPERTY(bool fourFingerShowDesktop READ fourFingerShowDesktop WRITE setFourFingerShowDesktop NOTIFY fourFingerShowDesktopChanged)
     Q_PROPERTY(bool pinchZoom READ pinchZoom WRITE setPinchZoom NOTIFY pinchZoomChanged)
     Q_PROPERTY(bool tapToClick READ tapToClick WRITE setTapToClick NOTIFY tapToClickChanged)
     Q_PROPERTY(bool twoFingerRightClick READ twoFingerRightClick WRITE setTwoFingerRightClick NOTIFY twoFingerRightClickChanged)
@@ -34,6 +35,7 @@ public:
     double scrollSpeed() const { return m_scrollSpeed; }
     bool disableRotation() const { return m_disableRotation; }
     bool threeFingerSwipe() const { return m_threeFingerSwipe; }
+    bool fourFingerShowDesktop() const { return m_fourFingerShowDesktop; }
     bool pinchZoom() const { return m_pinchZoom; }
     bool tapToClick() const { return m_tapToClick; }
     bool twoFingerRightClick() const { return m_twoFingerRightClick; }
@@ -45,6 +47,7 @@ public:
     void setScrollSpeed(double v) { if (m_scrollSpeed != v) { m_scrollSpeed = v; Q_EMIT scrollSpeedChanged(); } }
     void setDisableRotation(bool v) { if (m_disableRotation != v) { m_disableRotation = v; Q_EMIT disableRotationChanged(); } }
     void setThreeFingerSwipe(bool v) { if (m_threeFingerSwipe != v) { m_threeFingerSwipe = v; Q_EMIT threeFingerSwipeChanged(); } }
+    void setFourFingerShowDesktop(bool v) { if (m_fourFingerShowDesktop != v) { m_fourFingerShowDesktop = v; Q_EMIT fourFingerShowDesktopChanged(); } }
     void setPinchZoom(bool v) { if (m_pinchZoom != v) { m_pinchZoom = v; Q_EMIT pinchZoomChanged(); } }
     void setTapToClick(bool v) { if (m_tapToClick != v) { m_tapToClick = v; Q_EMIT tapToClickChanged(); } }
     void setTwoFingerRightClick(bool v) { if (m_twoFingerRightClick != v) { m_twoFingerRightClick = v; Q_EMIT twoFingerRightClickChanged(); } }
@@ -58,6 +61,7 @@ Q_SIGNALS:
     void scrollSpeedChanged();
     void disableRotationChanged();
     void threeFingerSwipeChanged();
+    void fourFingerShowDesktopChanged();
     void pinchZoomChanged();
     void tapToClickChanged();
     void twoFingerRightClickChanged();
@@ -71,6 +75,7 @@ private:
     double m_scrollSpeed = 1.0;
     bool m_disableRotation = true;
     bool m_threeFingerSwipe = true;
+    bool m_fourFingerShowDesktop = true;
     bool m_pinchZoom = true;
     bool m_tapToClick = true;
     bool m_twoFingerRightClick = true;

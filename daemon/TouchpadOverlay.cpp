@@ -40,6 +40,7 @@ static Settings loadFromConfig()
     s.scrollSpeed = grp.readEntry("scrollSpeed", s.scrollSpeed);
     s.disableRotation = grp.readEntry("disableRotation", s.disableRotation);
     s.threeFingerSwipe = grp.readEntry("threeFingerSwipe", s.threeFingerSwipe);
+    s.fourFingerShowDesktop = grp.readEntry("fourFingerShowDesktop", s.fourFingerShowDesktop);
     s.pinchZoom = grp.readEntry("pinchZoom", s.pinchZoom);
     s.tapToClick = grp.readEntry("tapToClick", s.tapToClick);
     s.twoFingerRightClick = grp.readEntry("twoFingerRightClick", s.twoFingerRightClick);
@@ -77,6 +78,11 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
             m_buttonHighlightTimer->start();
         }
     });
+
+    connect(m_touch, &TouchInputHandler::showDesktopRequested,
+            m_windows, &WindowMover::showDesktopTopScreen);
+    connect(m_touch, &TouchInputHandler::restoreWindowsRequested,
+            m_windows, &WindowMover::unminimizeTopScreen);
 
     m_showTimer = new QTimer(this);
     m_showTimer->setSingleShot(true);
@@ -321,6 +327,7 @@ void TouchpadOverlay::applySettings(const Settings &s)
     m_touch->setPointerSpeed(s.pointerSpeed);
     m_touch->setScrollSpeed(s.scrollSpeed);
     m_touch->setThreeFingerSwipe(s.threeFingerSwipe);
+    m_touch->setFourFingerShowDesktop(s.fourFingerShowDesktop);
     m_touch->setPinchZoom(s.pinchZoom);
     m_touch->setTapToClick(s.tapToClick);
     m_touch->setTwoFingerRightClick(s.twoFingerRightClick);

@@ -116,6 +116,12 @@ KCM.SimpleKCM {
         }
 
         QQC2.CheckBox {
+            Kirigami.FormData.label: i18n("Four-finger swipe up to show desktop")
+            checked: kcm.fourFingerShowDesktop
+            onToggled: { kcm.fourFingerShowDesktop = checked; kcm.needsSave = true }
+        }
+
+        QQC2.CheckBox {
             Kirigami.FormData.label: i18n("Pinch to zoom")
             checked: kcm.pinchZoom
             onToggled: { kcm.pinchZoom = checked; kcm.needsSave = true }

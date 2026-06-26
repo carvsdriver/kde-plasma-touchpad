@@ -22,6 +22,7 @@ public:
     void setScrollSpeed(double speed) { m_scrollSpeed = speed; }
     void setButtonCount(int count) { m_buttonCount = qBound(0, count, 3); }
     void setThreeFingerSwipe(bool enabled) { m_threeFingerSwipeEnabled = enabled; }
+    void setFourFingerShowDesktop(bool enabled) { m_fourFingerShowDesktopEnabled = enabled; }
     void setPinchZoom(bool enabled) { m_pinchZoomEnabled = enabled; }
     void setTapToClick(bool enabled) { m_tapToClickEnabled = enabled; }
     void setTwoFingerRightClick(bool enabled) { m_twoFingerRightClickEnabled = enabled; }
@@ -34,6 +35,8 @@ public:
 Q_SIGNALS:
     void deviceError();
     void buttonHighlightChanged(int buttonIndex); // -1 = no highlight
+    void showDesktopRequested();
+    void restoreWindowsRequested();
 
 private Q_SLOTS:
     void touchReadyRead(int fd);
@@ -43,6 +46,11 @@ private:
     bool openUinput();
     void closeFds();
     void processSyncReport();
+    void processOneFingerMove(int activeCount, int primarySlot, bool secondaryIsButton,
+                              bool primaryInTouchpad, bool primaryInCenter);
+    void processTwoFingerGesture(int primarySlot, int secondarySlot);
+    void processThreeFingerSwipe(int activeCount);
+    void processFourFingerSwipe(int activeCount);
     void recoverFromDrop();
     void handleFingerLift(int slotIdx);
     void emitRelative(int dx, int dy);
@@ -75,6 +83,7 @@ private:
     double m_scrollSpeed = 1.0;
     int m_buttonCount = 3;
     bool m_threeFingerSwipeEnabled = true;
+    bool m_fourFingerShowDesktopEnabled = true;
     bool m_pinchZoomEnabled = true;
     bool m_tapToClickEnabled = true;
     bool m_twoFingerRightClickEnabled = true;
@@ -116,6 +125,8 @@ private:
 
     int m_swipeAccumX = 0;
     bool m_swipeFired = false;
+    int m_fourFingerAccumY = 0;
+    bool m_fourFingerFired = false;
     double m_pinchAccum = 0.0;
     double m_rotateAccum = 0.0;
 

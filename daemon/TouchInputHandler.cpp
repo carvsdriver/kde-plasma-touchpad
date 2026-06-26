@@ -346,6 +346,8 @@ void TouchInputHandler::processSyncReport()
         m_scrollAccum = 0.0;
         m_swipeAccumX = 0;
         m_swipeFired = false;
+        m_fourFingerAccumY = 0;
+        m_fourFingerFired = false;
         m_pinchAccum = 0.0;
         m_rotateAccum = 0.0;
         m_twoFingerGesture = TwoFingerGesture::None;
@@ -386,6 +388,8 @@ void TouchInputHandler::processSyncReport()
         m_gestureLiftedCount = 0;
         m_swipeFired = false;
         m_swipeAccumX = 0;
+        m_fourFingerAccumY = 0;
+        m_fourFingerFired = false;
         m_twoFingerGesture = TwoFingerGesture::None;
         m_twoFingerCleanLiftCount = 0;
         m_scrollAccum = 0.0;
@@ -479,185 +483,12 @@ void TouchInputHandler::processSyncReport()
         return;
     }
 
-    // ── 1-finger pointer move (also handles button strip drag) ──
     const bool secondaryIsButton = (secondarySlot >= 0 && m_slots[secondarySlot].inButtonStrip);
-    if (secondaryIsButton && m_buttonStripPending && !m_buttonStripHeld) {
-        emitButton(m_buttonStripCode, true);
-        m_buttonStripPending = false;
-        m_buttonStripHeld = true;
-    }
-    if (m_gestureLiftedCount == 0 && primaryInTouchpad && primaryInCenter && !s.firstMove &&
-        (activeCount == 1 || secondaryIsButton)) {
-        // Flush last frame's buffered move — finger is confirmed still active.
-        if (m_pendingCursorDX != 0 || m_pendingCursorDY != 0) {
-            emitRelative(m_pendingCursorDX, m_pendingCursorDY);
-            m_pendingCursorDX = 0;
-            m_pendingCursorDY = 0;
-        }
-        const int rawDX = s.x - s.prevX;
-        const int rawDY = s.y - s.prevY;
-        if (std::abs(rawDX) + std::abs(rawDY) >= JITTER_THRESHOLD_RAW) {
-            m_accumDX += rawDX * m_pointerSpeed;
-            m_accumDY += rawDY * m_pointerSpeed;
-            const int emitX = static_cast<int>(m_accumDX);
-            const int emitY = static_cast<int>(m_accumDY);
-            if (emitX != 0 || emitY != 0) {
-                m_pendingCursorDX = emitX;
-                m_pendingCursorDY = emitY;
-                m_accumDX -= emitX;
-                m_accumDY -= emitY;
-            }
-        }
-    }
-
-    // ── 2-finger gestures (mutually exclusive) ──
-    // All signals accumulate every frame while unclassified.  The first to cross
-    // its threshold commits the gesture type for the rest of the contact.
-    // Drag (anchor + mover) is checked before scroll because in an anchor-drag the
-    // centroid still moves, which would otherwise classify as scroll first.
-    if (activeCount == 2 && m_gestureLiftedCount == 0 && secondarySlot >= 0 && !secondaryIsButton) {
-        const Slot &s2 = m_slots[secondarySlot];
-        if (!s.firstMove && !s2.firstMove) {
-            const double cDX = ((s.x - s.prevX) + (s2.x - s2.prevX)) * 0.5;
-            const double cDY = ((s.y - s.prevY) + (s2.y - s2.prevY)) * 0.5;
-            const double currDist = std::hypot(double(s.x - s2.x), double(s.y - s2.y));
-            const double prevDist = std::hypot(double(s.prevX - s2.prevX), double(s.prevY - s2.prevY));
-            const double distDelta = currDist - prevDist;
-            const double prevAngle = std::atan2(double(s.prevY - s2.prevY), double(s.prevX - s2.prevX));
-            const double currAngle = std::atan2(double(s.y - s2.y), double(s.x - s2.x));
-            double angleDelta = currAngle - prevAngle;
-            if (angleDelta >  M_PI) angleDelta -= 2.0 * M_PI;
-            if (angleDelta < -M_PI) angleDelta += 2.0 * M_PI;
-
-            const double centroidSpeed = std::hypot(cDX, cDY);
-            // Scroll: both fingers must be moving in the same Y direction this frame
-            // (dy product >= 0) AND centroid translation must dominate distance change.
-            // The direction gate blocks frames where one finger reverses while the other
-            // continues, which the centroid filter alone misses (net centroid can still
-            // be nonzero while one finger goes opposite).
-            const int dy1Frame = s.y - s.prevY;
-            const int dy2Frame = s2.y - s2.prevY;
-            if (dy1Frame * dy2Frame >= 0 && std::abs(distDelta) <= centroidSpeed)
-                m_scrollAccum -= cDY * m_scrollSpeed * 6.0;
-            // Pinch: accumulate only when distance change dominates centroid translation.
-            // During scroll the centroid moves fast while distDelta stays small.
-            if (std::abs(distDelta) > centroidSpeed * 2.0)
-                m_pinchAccum += distDelta * 0.1;
-            if (std::abs(angleDelta) > 0.005)
-                m_rotateAccum += angleDelta * (180.0 / M_PI);
-
-            if (m_twoFingerGesture == TwoFingerGesture::None) {
-                const int sDist  = std::abs(s.x  - s.startX)  + std::abs(s.y  - s.startY);
-                const int s2Dist = std::abs(s2.x - s2.startX) + std::abs(s2.y - s2.startY);
-                const int anchorDist = std::min(sDist, s2Dist);
-                const int moverDist  = std::max(sDist, s2Dist);
-                if (moverDist >= GESTURE_DRAG_MOVER_RAW && anchorDist * 4 < moverDist) {
-                    // One finger barely moved relative to the other → drag-select.
-                    // Also require the anchor to be stationary THIS frame: a recently-
-                    // placed scroll finger that hasn't accumulated cumulative travel yet
-                    // looks like a stationary anchor by distance alone, but its per-frame
-                    // velocity betrays that it is actively moving.
-                    const Slot &anchorSlot = (sDist <= s2Dist) ? s : s2;
-                    const int anchorFrameSpeed = std::abs(anchorSlot.x - anchorSlot.prevX)
-                                               + std::abs(anchorSlot.y - anchorSlot.prevY);
-                    if (anchorFrameSpeed < JITTER_THRESHOLD_RAW) {
-                        m_twoFingerGesture = TwoFingerGesture::Drag;
-                        emitButton(BTN_LEFT, true);
-                        m_dragButtonHeld = true;
-                    }
-                } else if (anchorDist >= GESTURE_BOTH_MOVING_RAW) {
-                    // Both fingers genuinely moving → symmetric gestures only.
-                    // Scroll requires both fingers moving in the same direction:
-                    // dot product of cumulative displacement vectors must be positive.
-                    const int dx1 = s.x  - s.startX,  dy1 = s.y  - s.startY;
-                    const int dx2 = s2.x - s2.startX, dy2 = s2.y - s2.startY;
-                    const bool sameDirection = (dx1 * dx2 + dy1 * dy2 > 0);
-                    if (sameDirection && std::abs(m_scrollAccum) >= GESTURE_CLASSIFY_SCROLL)
-                        m_twoFingerGesture = TwoFingerGesture::Scroll;
-                    else if (std::abs(m_pinchAccum) >= GESTURE_CLASSIFY_PINCH)
-                        m_twoFingerGesture = TwoFingerGesture::Pinch;
-                    else if (m_rotateEnabled && std::abs(m_rotateAccum) >= GESTURE_CLASSIFY_ROTATE)
-                        m_twoFingerGesture = TwoFingerGesture::Rotate;
-                }
-            }
-
-            switch (m_twoFingerGesture) {
-            case TwoFingerGesture::Scroll: {
-                const int raw = static_cast<int>(m_scrollAccum);
-                if (raw != 0) {
-                    const int hiRes = m_invertScroll ? -raw : raw;
-                    input_event ev{};
-                    ev.type = EV_REL; ev.code = REL_WHEEL_HI_RES; ev.value = hiRes;
-                    writeEv(ev);
-                    const int fullTicks = hiRes / 120;
-                    if (fullTicks != 0) {
-                        ev.code = REL_WHEEL; ev.value = fullTicks;
-                        writeEv(ev);
-                    }
-                    emitSync();
-                    m_scrollAccum -= raw;
-                }
-                break;
-            }
-            case TwoFingerGesture::Drag: {
-                // Cursor follows the more-mobile finger (re-evaluated each frame).
-                const int sDist  = std::abs(s.x  - s.startX)  + std::abs(s.y  - s.startY);
-                const int s2Dist = std::abs(s2.x - s2.startX) + std::abs(s2.y - s2.startY);
-                const Slot &mover = (sDist >= s2Dist) ? s : s2;
-                const int rawDX = mover.x - mover.prevX;
-                const int rawDY = mover.y - mover.prevY;
-                if (std::abs(rawDX) + std::abs(rawDY) >= JITTER_THRESHOLD_RAW) {
-                    m_accumDX += rawDX * m_pointerSpeed;
-                    m_accumDY += rawDY * m_pointerSpeed;
-                    const int emitX = static_cast<int>(m_accumDX);
-                    const int emitY = static_cast<int>(m_accumDY);
-                    if (emitX != 0 || emitY != 0) {
-                        emitRelative(emitX, emitY);
-                        m_accumDX -= emitX;
-                        m_accumDY -= emitY;
-                    }
-                }
-                break;
-            }
-            case TwoFingerGesture::Pinch:
-                if (m_pinchZoomEnabled) {
-                    const int hiRes = static_cast<int>(m_pinchAccum);
-                    if (hiRes != 0) { emitCtrlScroll(hiRes); m_pinchAccum -= hiRes; }
-                }
-                break;
-            case TwoFingerGesture::Rotate:
-                if (m_rotateEnabled) {
-                    const int ticks = static_cast<int>(m_rotateAccum);
-                    if (ticks != 0) { emitDial(ticks); m_rotateAccum -= ticks; }
-                }
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    // ── 3-finger desktop switch ──
-    if (activeCount == 3 && m_threeFingerSwipeEnabled && m_gestureLiftedCount == 0 && !m_swipeFired) {
-        int totalDX = 0;
-        int movers = 0;
-        for (int i = 0; i < MAX_SLOTS; ++i) {
-            if (!m_slots[i].active || m_slots[i].firstMove) continue;
-            totalDX += m_slots[i].x - m_slots[i].prevX;
-            ++movers;
-        }
-        if (movers > 0) {
-            m_swipeAccumX += totalDX / movers;
-            const int threshold = (m_absXMax - m_absXMin) / 20;
-            if (m_swipeAccumX > threshold) {
-                switchDesktop(1);
-                m_swipeFired = true;
-            } else if (m_swipeAccumX < -threshold) {
-                switchDesktop(-1);
-                m_swipeFired = true;
-            }
-        }
-    }
+    processOneFingerMove(activeCount, primarySlot, secondaryIsButton, primaryInTouchpad, primaryInCenter);
+    if (activeCount == 2 && m_gestureLiftedCount == 0 && secondarySlot >= 0 && !secondaryIsButton)
+        processTwoFingerGesture(primarySlot, secondarySlot);
+    processThreeFingerSwipe(activeCount);
+    processFourFingerSwipe(activeCount);
 
     if (errno == ENODEV || errno == EIO) {
         qWarning() << "TouchInputHandler: device error" << errno << "- signalling exit";
@@ -725,6 +556,218 @@ void TouchInputHandler::handleFingerLift(int slotIdx)
     }
 
     ++m_gestureLiftedCount;
+}
+
+// ─── gesture handlers ───────────────────────────────────────────────────────
+
+void TouchInputHandler::processOneFingerMove(int activeCount, int primarySlot,
+                                              bool secondaryIsButton,
+                                              bool primaryInTouchpad, bool primaryInCenter)
+{
+    if (secondaryIsButton && m_buttonStripPending && !m_buttonStripHeld) {
+        emitButton(m_buttonStripCode, true);
+        m_buttonStripPending = false;
+        m_buttonStripHeld = true;
+    }
+    Slot &s = m_slots[primarySlot];
+    if (m_gestureLiftedCount == 0 && primaryInTouchpad && primaryInCenter && !s.firstMove &&
+        (activeCount == 1 || secondaryIsButton)) {
+        // Flush last frame's buffered move — finger is confirmed still active.
+        if (m_pendingCursorDX != 0 || m_pendingCursorDY != 0) {
+            emitRelative(m_pendingCursorDX, m_pendingCursorDY);
+            m_pendingCursorDX = 0;
+            m_pendingCursorDY = 0;
+        }
+        const int rawDX = s.x - s.prevX;
+        const int rawDY = s.y - s.prevY;
+        if (std::abs(rawDX) + std::abs(rawDY) >= JITTER_THRESHOLD_RAW) {
+            m_accumDX += rawDX * m_pointerSpeed;
+            m_accumDY += rawDY * m_pointerSpeed;
+            const int emitX = static_cast<int>(m_accumDX);
+            const int emitY = static_cast<int>(m_accumDY);
+            if (emitX != 0 || emitY != 0) {
+                m_pendingCursorDX = emitX;
+                m_pendingCursorDY = emitY;
+                m_accumDX -= emitX;
+                m_accumDY -= emitY;
+            }
+        }
+    }
+}
+
+void TouchInputHandler::processTwoFingerGesture(int primarySlot, int secondarySlot)
+{
+    // Guard: called only when activeCount==2, gestureLiftedCount==0,
+    //        secondarySlot>=0, and secondarySlot is not a button strip slot.
+    Slot &s        = m_slots[primarySlot];
+    const Slot &s2 = m_slots[secondarySlot];
+    if (s.firstMove || s2.firstMove)
+        return;
+
+    const double cDX = ((s.x - s.prevX) + (s2.x - s2.prevX)) * 0.5;
+    const double cDY = ((s.y - s.prevY) + (s2.y - s2.prevY)) * 0.5;
+    const double currDist = std::hypot(double(s.x - s2.x), double(s.y - s2.y));
+    const double prevDist = std::hypot(double(s.prevX - s2.prevX), double(s.prevY - s2.prevY));
+    const double distDelta = currDist - prevDist;
+    const double prevAngle = std::atan2(double(s.prevY - s2.prevY), double(s.prevX - s2.prevX));
+    const double currAngle = std::atan2(double(s.y - s2.y), double(s.x - s2.x));
+    double angleDelta = currAngle - prevAngle;
+    if (angleDelta >  M_PI) angleDelta -= 2.0 * M_PI;
+    if (angleDelta < -M_PI) angleDelta += 2.0 * M_PI;
+
+    const double centroidSpeed = std::hypot(cDX, cDY);
+    // Scroll: both fingers must be moving in the same Y direction this frame
+    // (dy product >= 0) AND centroid translation must dominate distance change.
+    // The direction gate blocks frames where one finger reverses while the other
+    // continues, which the centroid filter alone misses (net centroid can still
+    // be nonzero while one finger goes opposite).
+    const int dy1Frame = s.y - s.prevY;
+    const int dy2Frame = s2.y - s2.prevY;
+    if (dy1Frame * dy2Frame >= 0 && std::abs(distDelta) <= centroidSpeed)
+        m_scrollAccum -= cDY * m_scrollSpeed * 6.0;
+    // Pinch: accumulate only when distance change dominates centroid translation.
+    // During scroll the centroid moves fast while distDelta stays small.
+    if (std::abs(distDelta) > centroidSpeed * 2.0)
+        m_pinchAccum += distDelta * 0.1;
+    if (std::abs(angleDelta) > 0.005)
+        m_rotateAccum += angleDelta * (180.0 / M_PI);
+
+    if (m_twoFingerGesture == TwoFingerGesture::None) {
+        const int sDist  = std::abs(s.x  - s.startX)  + std::abs(s.y  - s.startY);
+        const int s2Dist = std::abs(s2.x - s2.startX) + std::abs(s2.y - s2.startY);
+        const int anchorDist = std::min(sDist, s2Dist);
+        const int moverDist  = std::max(sDist, s2Dist);
+        if (moverDist >= GESTURE_DRAG_MOVER_RAW && anchorDist * 4 < moverDist) {
+            // One finger barely moved relative to the other → drag-select.
+            // Also require the anchor to be stationary THIS frame: a recently-
+            // placed scroll finger that hasn't accumulated cumulative travel yet
+            // looks like a stationary anchor by distance alone, but its per-frame
+            // velocity betrays that it is actively moving.
+            const Slot &anchorSlot = (sDist <= s2Dist) ? s : s2;
+            const int anchorFrameSpeed = std::abs(anchorSlot.x - anchorSlot.prevX)
+                                       + std::abs(anchorSlot.y - anchorSlot.prevY);
+            if (anchorFrameSpeed < JITTER_THRESHOLD_RAW) {
+                m_twoFingerGesture = TwoFingerGesture::Drag;
+                emitButton(BTN_LEFT, true);
+                m_dragButtonHeld = true;
+            }
+        } else if (anchorDist >= GESTURE_BOTH_MOVING_RAW) {
+            // Both fingers genuinely moving → symmetric gestures only.
+            // Scroll requires both fingers moving in the same direction:
+            // dot product of cumulative displacement vectors must be positive.
+            const int dx1 = s.x  - s.startX,  dy1 = s.y  - s.startY;
+            const int dx2 = s2.x - s2.startX, dy2 = s2.y - s2.startY;
+            const bool sameDirection = (dx1 * dx2 + dy1 * dy2 > 0);
+            if (sameDirection && std::abs(m_scrollAccum) >= GESTURE_CLASSIFY_SCROLL)
+                m_twoFingerGesture = TwoFingerGesture::Scroll;
+            else if (std::abs(m_pinchAccum) >= GESTURE_CLASSIFY_PINCH)
+                m_twoFingerGesture = TwoFingerGesture::Pinch;
+            else if (m_rotateEnabled && std::abs(m_rotateAccum) >= GESTURE_CLASSIFY_ROTATE)
+                m_twoFingerGesture = TwoFingerGesture::Rotate;
+        }
+    }
+
+    switch (m_twoFingerGesture) {
+    case TwoFingerGesture::Scroll: {
+        const int raw = static_cast<int>(m_scrollAccum);
+        if (raw != 0) {
+            const int hiRes = m_invertScroll ? -raw : raw;
+            input_event ev{};
+            ev.type = EV_REL; ev.code = REL_WHEEL_HI_RES; ev.value = hiRes;
+            writeEv(ev);
+            const int fullTicks = hiRes / 120;
+            if (fullTicks != 0) {
+                ev.code = REL_WHEEL; ev.value = fullTicks;
+                writeEv(ev);
+            }
+            emitSync();
+            m_scrollAccum -= raw;
+        }
+        break;
+    }
+    case TwoFingerGesture::Drag: {
+        // Cursor follows the more-mobile finger (re-evaluated each frame).
+        const int sDist  = std::abs(s.x  - s.startX)  + std::abs(s.y  - s.startY);
+        const int s2Dist = std::abs(s2.x - s2.startX) + std::abs(s2.y - s2.startY);
+        const Slot &mover = (sDist >= s2Dist) ? s : s2;
+        const int rawDX = mover.x - mover.prevX;
+        const int rawDY = mover.y - mover.prevY;
+        if (std::abs(rawDX) + std::abs(rawDY) >= JITTER_THRESHOLD_RAW) {
+            m_accumDX += rawDX * m_pointerSpeed;
+            m_accumDY += rawDY * m_pointerSpeed;
+            const int emitX = static_cast<int>(m_accumDX);
+            const int emitY = static_cast<int>(m_accumDY);
+            if (emitX != 0 || emitY != 0) {
+                emitRelative(emitX, emitY);
+                m_accumDX -= emitX;
+                m_accumDY -= emitY;
+            }
+        }
+        break;
+    }
+    case TwoFingerGesture::Pinch:
+        if (m_pinchZoomEnabled) {
+            const int hiRes = static_cast<int>(m_pinchAccum);
+            if (hiRes != 0) { emitCtrlScroll(hiRes); m_pinchAccum -= hiRes; }
+        }
+        break;
+    case TwoFingerGesture::Rotate:
+        if (m_rotateEnabled) {
+            const int ticks = static_cast<int>(m_rotateAccum);
+            if (ticks != 0) { emitDial(ticks); m_rotateAccum -= ticks; }
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+void TouchInputHandler::processThreeFingerSwipe(int activeCount)
+{
+    if (activeCount != 3 || !m_threeFingerSwipeEnabled || m_gestureLiftedCount != 0 || m_swipeFired)
+        return;
+    int totalDX = 0;
+    int movers = 0;
+    for (int i = 0; i < MAX_SLOTS; ++i) {
+        if (!m_slots[i].active || m_slots[i].firstMove) continue;
+        totalDX += m_slots[i].x - m_slots[i].prevX;
+        ++movers;
+    }
+    if (movers > 0) {
+        m_swipeAccumX += totalDX / movers;
+        const int threshold = (m_absXMax - m_absXMin) / 20;
+        if (m_swipeAccumX > threshold) {
+            switchDesktop(1);
+            m_swipeFired = true;
+        } else if (m_swipeAccumX < -threshold) {
+            switchDesktop(-1);
+            m_swipeFired = true;
+        }
+    }
+}
+
+void TouchInputHandler::processFourFingerSwipe(int activeCount)
+{
+    if (activeCount != 4 || !m_fourFingerShowDesktopEnabled || m_fourFingerFired || m_gestureLiftedCount != 0)
+        return;
+    int totalDY = 0;
+    int movers = 0;
+    for (int i = 0; i < MAX_SLOTS; ++i) {
+        if (!m_slots[i].active || m_slots[i].firstMove) continue;
+        totalDY += m_slots[i].y - m_slots[i].prevY;
+        ++movers;
+    }
+    if (movers > 0) {
+        m_fourFingerAccumY += totalDY / movers;
+        const int threshold = (m_absYMax - m_absYMin) / 20;
+        if (m_fourFingerAccumY < -threshold) {
+            Q_EMIT showDesktopRequested();
+            m_fourFingerFired = true;
+        } else if (m_fourFingerAccumY > threshold) {
+            Q_EMIT restoreWindowsRequested();
+            m_fourFingerFired = true;
+        }
+    }
 }
 
 // ─── uinput emission ────────────────────────────────────────────────────────

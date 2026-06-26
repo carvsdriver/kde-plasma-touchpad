@@ -35,6 +35,10 @@ public:
     void moveWindowsToTopScreen();
     // Move only the windows we previously relocated back to eDP-2.
     void restore();
+    // Minimize all normal windows on eDP-1 only (show desktop, top screen).
+    void showDesktopTopScreen();
+    // Unminimize all normal windows on eDP-1 (restore after show desktop).
+    void unminimizeTopScreen();
 
 public Q_SLOTS:
     // Called by the KWin move script via callDBus for each window it moves.

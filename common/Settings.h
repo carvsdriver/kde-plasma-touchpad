@@ -14,6 +14,7 @@ struct Settings {
     double scrollSpeed = 1.0;
     bool disableRotation = true;
     bool threeFingerSwipe = true;
+    bool fourFingerShowDesktop = true;
     bool pinchZoom = true;
     bool tapToClick = true;
     bool twoFingerRightClick = true;

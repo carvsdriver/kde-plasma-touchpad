@@ -33,7 +33,6 @@ target_link_libraries(plasma-touchpad-daemon PRIVATE
 target_include_directories(plasma-touchpad-daemon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 install(TARGETS plasma-touchpad-daemon DESTINATION ${KDE_INSTALL_LIBEXECDIR})
-install(FILES plasma-touchpad.desktop DESTINATION ${KDE_INSTALL_AUTOSTARTDIR})
 
 # systemd user service — handles startup and automatic restart on resume/crash.
 configure_file(plasma-touchpad.service.in plasma-touchpad.service @ONLY)

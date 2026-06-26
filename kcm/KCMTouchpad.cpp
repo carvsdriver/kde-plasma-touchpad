@@ -29,6 +29,7 @@ void KCMTouchpad::load()
     setScrollSpeed(grp.readEntry("scrollSpeed", s.scrollSpeed));
     setDisableRotation(grp.readEntry("disableRotation", s.disableRotation));
     setThreeFingerSwipe(grp.readEntry("threeFingerSwipe", s.threeFingerSwipe));
+    setFourFingerShowDesktop(grp.readEntry("fourFingerShowDesktop", s.fourFingerShowDesktop));
     setPinchZoom(grp.readEntry("pinchZoom", s.pinchZoom));
     setTapToClick(grp.readEntry("tapToClick", s.tapToClick));
     setTwoFingerRightClick(grp.readEntry("twoFingerRightClick", s.twoFingerRightClick));
@@ -47,6 +48,7 @@ void KCMTouchpad::save()
     grp.writeEntry("scrollSpeed", m_scrollSpeed);
     grp.writeEntry("disableRotation", m_disableRotation);
     grp.writeEntry("threeFingerSwipe", m_threeFingerSwipe);
+    grp.writeEntry("fourFingerShowDesktop", m_fourFingerShowDesktop);
     grp.writeEntry("pinchZoom", m_pinchZoom);
     grp.writeEntry("tapToClick", m_tapToClick);
     grp.writeEntry("twoFingerRightClick", m_twoFingerRightClick);
@@ -71,6 +73,7 @@ void KCMTouchpad::defaults()
     setScrollSpeed(s.scrollSpeed);
     setDisableRotation(s.disableRotation);
     setThreeFingerSwipe(s.threeFingerSwipe);
+    setFourFingerShowDesktop(s.fourFingerShowDesktop);
     setPinchZoom(s.pinchZoom);
     setTapToClick(s.tapToClick);
     setTwoFingerRightClick(s.twoFingerRightClick);

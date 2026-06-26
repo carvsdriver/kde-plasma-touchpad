@@ -163,6 +163,40 @@ void WindowMover::restore()
     m_moved = false;
 }
 
+void WindowMover::showDesktopTopScreen()
+{
+    const QString script = QStringLiteral(R"JS(
+        var outTop = workspace.screenAt({x: 900, y: 562});
+        if (!outTop || outTop.name !== "eDP-1") {
+            console.warn("plasma-touchpad showDesktop: eDP-1 not at expected position");
+        } else {
+            var wl = workspace.windowList();
+            for (var i = 0; i < wl.length; i++) {
+                var w = wl[i];
+                if (w.normalWindow && w.output && w.output.name === "eDP-1" && !w.skipTaskbar)
+                    w.minimized = true;
+            }
+        }
+    )JS");
+    runKWinScript(script);
+}
+
+void WindowMover::unminimizeTopScreen()
+{
+    // Minimized windows lose their output reference in KWin 6, so we cannot
+    // filter by output here.  Unminimize all minimized normal windows instead —
+    // this matches standard show-desktop toggle behaviour.
+    const QString script = QStringLiteral(R"JS(
+        var wl = workspace.windowList();
+        for (var i = 0; i < wl.length; i++) {
+            var w = wl[i];
+            if (w.normalWindow && !w.skipTaskbar && w.minimized)
+                w.minimized = false;
+        }
+    )JS");
+    runKWinScript(script);
+}
+
 void WindowMover::runKWinScript(const QString &scriptContent)
 {
     // KWin 6 loadScript requires a file path, not inline content.

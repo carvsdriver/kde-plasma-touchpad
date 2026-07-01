@@ -81,14 +81,33 @@ void WindowMover::moveWindowsToTopScreen()
             for (var i = 0; i < wl.length; i++) {
                 var w = wl[i];
                 if (!w.normalWindow) continue;
-                if (!w.output || w.output.name !== "eDP-2") continue;
+                // Minimized windows lose their output reference in KWin 6.
+                // Fall back to frameGeometry: eDP-2 occupies y >= 1125 in
+                // KWin's logical coordinate space.
+                var onEDP2;
+                if (w.minimized) {
+                    var g = w.frameGeometry;
+                    onEDP2 = (g.y + g.height / 2 >= 1125);
+                } else {
+                    onEDP2 = (w.output && w.output.name === "eDP-2");
+                }
+                if (!onEDP2) continue;
                 callDBus(
                     "org.kde.plasma.touchpad", "/WindowMover",
                     "org.kde.plasma.touchpad.WindowMover", "reportMovedWindow",
                     w.internalId.toString(), function() {}
                 );
-                workspace.sendClientToScreen(w, outTop);
-                if (!firstMoved) firstMoved = w;
+                if (w.minimized) {
+                    // Briefly unminimize so sendClientToScreen records the new
+                    // output, then re-minimize.  All ops are queued in one script
+                    // execution so there is no visible flash.
+                    w.minimized = false;
+                    workspace.sendClientToScreen(w, outTop);
+                    w.minimized = true;
+                } else {
+                    workspace.sendClientToScreen(w, outTop);
+                    if (!firstMoved) firstMoved = w;
+                }
             }
             if (needsRestore) savedActive.minimized = false;
             if (savedActive && savedActive.normalWindow && firstMoved) {
@@ -139,12 +158,27 @@ void WindowMover::restore()
             for (var i = 0; i < wl.length; i++) {
                 var w = wl[i];
                 if (!w.normalWindow) continue;
-                if (!w.output || w.output.name !== "eDP-1") continue;
+                // Minimized windows lose their output reference in KWin 6.
+                // Fall back to frameGeometry: eDP-1 occupies y < 1125.
+                var onEDP1;
+                if (w.minimized) {
+                    var g = w.frameGeometry;
+                    onEDP1 = (g.y + g.height / 2 < 1125);
+                } else {
+                    onEDP1 = (w.output && w.output.name === "eDP-1");
+                }
+                if (!onEDP1) continue;
                 var id = w.internalId.toString();
                 for (var j = 0; j < ids.length; j++) {
                     if (id === ids[j]) {
-                        workspace.sendClientToScreen(w, outBottom);
-                        if (!firstMoved) firstMoved = w;
+                        if (w.minimized) {
+                            w.minimized = false;
+                            workspace.sendClientToScreen(w, outBottom);
+                            w.minimized = true;
+                        } else {
+                            workspace.sendClientToScreen(w, outBottom);
+                            if (!firstMoved) firstMoved = w;
+                        }
                         break;
                     }
                 }

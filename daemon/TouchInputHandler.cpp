@@ -180,7 +180,8 @@ bool TouchInputHandler::openUinput()
 void TouchInputHandler::touchReadyRead(int fd)
 {
     input_event ev{};
-    while (::read(fd, &ev, sizeof(ev)) == static_cast<ssize_t>(sizeof(ev))) {
+    ssize_t n;
+    while ((n = ::read(fd, &ev, sizeof(ev))) == static_cast<ssize_t>(sizeof(ev))) {
         if (m_pendingDrop) {
             if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
                 m_pendingDrop = false;
@@ -242,6 +243,15 @@ void TouchInputHandler::touchReadyRead(int fd)
         default:
             break;
         }
+    }
+
+    // errno is only valid immediately after read() returns an error.
+    // Checking it after arbitrary gesture processing (which calls ioctl/write)
+    // would read a stale value from an unrelated earlier syscall.
+    if (n < 0 && (errno == ENODEV || errno == EIO)) {
+        qWarning() << "TouchInputHandler: device error" << errno << "- signalling exit";
+        m_notifier->setEnabled(false);
+        Q_EMIT deviceError();
     }
 }
 
@@ -489,13 +499,6 @@ void TouchInputHandler::processSyncReport()
         processTwoFingerGesture(primarySlot, secondarySlot);
     processThreeFingerSwipe(activeCount);
     processFourFingerSwipe(activeCount);
-
-    if (errno == ENODEV || errno == EIO) {
-        qWarning() << "TouchInputHandler: device error" << errno << "- signalling exit";
-        m_notifier->setEnabled(false);
-        Q_EMIT deviceError();
-        return;
-    }
 
     for (int i = 0; i < MAX_SLOTS; ++i)
         if (m_slots[i].active)

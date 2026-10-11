@@ -37,6 +37,9 @@ ui_*.h
 .DS_Store
 nohup.out
 
+# Locally built RPMs (published packages come from COPR)
+releases/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

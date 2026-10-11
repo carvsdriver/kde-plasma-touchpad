@@ -1,0 +1,31 @@
+# Packit: builds RPMs in Fedora COPR from this GitHub repository.
+# https://packit.dev/docs/configuration
+
+specfile_path: plasma-touchpad.spec
+upstream_package_name: kde-plasma-touchpad
+downstream_package_name: plasma-touchpad
+upstream_tag_template: v{version}
+
+actions:
+  # Produce kde-plasma-touchpad-<version>.tar.gz with a matching top-level
+  # directory, as the spec's %autosetup expects.
+  create-archive:
+    - bash -c "git archive --prefix=kde-plasma-touchpad-${PACKIT_PROJECT_VERSION}/ -o kde-plasma-touchpad-${PACKIT_PROJECT_VERSION}.tar.gz HEAD"
+    - bash -c "echo kde-plasma-touchpad-${PACKIT_PROJECT_VERSION}.tar.gz"
+
+jobs:
+  # Published GitHub release -> stable COPR repo users install from.
+  - job: copr_build
+    trigger: release
+    owner: carvsdriver
+    project: yoga-book-9
+    targets:
+      - fedora-all-x86_64
+    preserve_project: true
+    list_on_homepage: true
+
+  # Pull requests -> throwaway Packit COPR builds as CI.
+  - job: copr_build
+    trigger: pull_request
+    targets:
+      - fedora-all-x86_64

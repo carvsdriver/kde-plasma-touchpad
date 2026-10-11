@@ -4,14 +4,13 @@ Release:        1%{?dist}
 Summary:        On-screen touchpad daemon for Lenovo Yoga Book 9
 
 License:        GPL-2.0-or-later
-URL:            https://github.com/davecarey/kde-plasma-touchpad
+URL:            https://github.com/carvsdriver/kde-plasma-touchpad
+# GitHub tag archive.  Packit replaces this with a git archive of the commit
+# being built; scripts/build-rpm.sh produces the same layout locally.
+Source0:        %{url}/archive/v%{version}/kde-plasma-touchpad-%{version}.tar.gz
 
-# Build a source tarball from a local checkout:
-#   tar czf plasma-touchpad-0.1.0.tar.gz \
-#       --transform 's,^\.,plasma-touchpad-0.1.0,' \
-#       --exclude='./.git' --exclude='./build' .
-#   cp plasma-touchpad-0.1.0.tar.gz ~/rpmbuild/SOURCES/
-Source0:        %{name}-%{version}.tar.gz
+# Hardware-specific: the Yoga Book 9 is an x86_64-only machine.
+ExclusiveArch:  x86_64
 
 BuildRequires:  cmake >= 3.20
 BuildRequires:  extra-cmake-modules
@@ -30,6 +29,7 @@ BuildRequires:  kf6-kwindowsystem-devel
 BuildRequires:  layer-shell-qt-devel
 BuildRequires:  wayland-devel
 BuildRequires:  wayland-protocols-devel
+BuildRequires:  systemd-rpm-macros
 
 Requires:       qt6-qtbase
 Requires:       qt6-qtdeclarative
@@ -45,7 +45,7 @@ the bottom eDP-2 screen and translates raw touch events into pointer
 movement, scrolling, and gestures via uinput.
 
 %prep
-%autosetup
+%autosetup -n kde-plasma-touchpad-%{version}
 
 %build
 %cmake \
@@ -56,10 +56,26 @@ movement, scrolling, and gestures via uinput.
 %install
 %cmake_install
 
+# Enable the user service for every user by default.
+mkdir -p %{buildroot}%{_userpresetdir}
+echo 'enable plasma-touchpad.service' \
+    > %{buildroot}%{_userpresetdir}/90-plasma-touchpad.preset
+
+%post
+%systemd_user_post plasma-touchpad.service
+
+%preun
+%systemd_user_preun plasma-touchpad.service
+
+%postun
+%systemd_user_postun plasma-touchpad.service
+
 %files
+%license LICENSE
+%doc README.md
 %{_libdir}/libexec/plasma-touchpad-daemon
-/etc/xdg/autostart/plasma-touchpad.desktop
 %{_userunitdir}/plasma-touchpad.service
+%{_userpresetdir}/90-plasma-touchpad.preset
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_yoga9_onscreen_touchpad.so
 %{_datadir}/plasma/kcms/kcm_yoga9_onscreen_touchpad.json
 %{_datadir}/applications/kcm_yoga9_onscreen_touchpad.desktop

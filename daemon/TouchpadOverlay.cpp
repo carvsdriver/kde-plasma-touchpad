@@ -115,6 +115,39 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
         QStringLiteral("configChanged"),
         this, SLOT(reloadSettings()));
 
+    // Workaround for Qt crash when the compositor adds or removes a Wayland
+    // output while QWaylandWindow surfaces are alive.  Qt's internal
+    // handleScreensChanged() slot calls calculateScreenFromSurfaceEvents()
+    // → QWindow::screen(), which crashes if a wl_output is not yet (or no
+    // longer) mapped to a QScreen — for example during a suspend/resume cycle
+    // when the compositor re-announces its outputs.
+    //
+    // We connect here (in the constructor, before any QQuickView is ever
+    // created) so our slots are registered before QWaylandWindow's own
+    // screenAdded/screenRemoved connections (which are added when QQuickView
+    // is constructed in createOverlayImpl).  Qt dispatches DirectConnection
+    // slots in registration order, so our slot runs first.  We destroy the
+    // overlay in our slot; once the QWaylandWindow is deleted it
+    // auto-disconnects, and its stale handler is never invoked.
+    auto onScreenTopologyChanged = [this](QScreen *screen) {
+        if (!m_view)
+            return;
+        qWarning() << "TouchpadOverlay: screen topology changed (" << screen->name()
+                   << ") while overlay alive; hiding to avoid Qt SEGV, will recreate";
+        const DockPosition pos = m_pendingPosition;
+        hide();
+        // Wait 1.5 s for the compositor to finish announcing all outputs before
+        // recreating the overlay.
+        QTimer::singleShot(1500, this, [this, pos]() {
+            if (!m_view && pos != DockPosition::Detached)
+                show(pos);
+        });
+    };
+    connect(qGuiApp, &QGuiApplication::screenAdded,
+            this, onScreenTopologyChanged, Qt::DirectConnection);
+    connect(qGuiApp, &QGuiApplication::screenRemoved,
+            this, onScreenTopologyChanged, Qt::DirectConnection);
+
 }
 
 TouchpadOverlay::~TouchpadOverlay()
@@ -208,6 +241,13 @@ void TouchpadOverlay::createOverlayImpl()
     m_windows->moveWindowsToTopScreen();
     m_panels->movePanelsToTopScreen();
     setVirtualKeyboardEnabled(false);
+    // Suppress the rotation script before any Wayland surface is created.
+    // kscreen-doctor (called by rotate-screens.sh) causes the compositor to
+    // send wl_output.transform events to alive surfaces; if one arrives while
+    // a QWaylandWindow is alive, QWaylandWindow::updateBufferTransform() calls
+    // QWindow::screen() which crashes when the screen is transiently null
+    // during output reconfiguration.  Suppression is lifted in hide().
+    setRotationSuppressed(true);
 
     // Full-screen black layer on eDP-2, sits behind the touchpad overlay.
     // LayerTop (2) is below LayerOverlay (3), so the touchpad renders on top.
@@ -333,7 +373,11 @@ void TouchpadOverlay::applySettings(const Settings &s)
     m_touch->setTwoFingerRightClick(s.twoFingerRightClick);
     m_touch->setTwoFingerRotate(s.twoFingerRotate);
     m_touch->setInvertScroll(s.invertScroll);
-    setRotationSuppressed(s.disableRotation && m_view != nullptr);
+    // Always suppress rotation while the overlay is visible, regardless of
+    // the disableRotation setting.  The rotation script calls kscreen-doctor
+    // which triggers wl_output.transform events that crash updateBufferTransform
+    // when any QWaylandWindow is alive.  Rotation is re-enabled in hide().
+    setRotationSuppressed(m_view != nullptr);
 }
 
 void TouchpadOverlay::reloadSettings()

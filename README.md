@@ -23,7 +23,7 @@ The Yoga Book 9 has a second screen on the bottom half. When the keyboard dock i
 - **Virtual keyboard suppression** — disables the KWin OSK while the touchpad overlay is visible
 - **Auto-activation** — detects keyboard dock position via the `lenovo-yb9-kbdock` driver
 - **Live colour scheme** — overlay tracks KDE colour scheme changes in real time; can also be forced light or dark
-- **System Settings KCM** — all options configurable under *Input Devices → On-Screen Touchpad*
+- **System Settings KCM** — all options configurable under *System Settings → Connected Devices → On-Screen Touchpad*
 
 ## Requirements
 

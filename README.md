@@ -41,7 +41,7 @@ All required kernel changes are merged in mainline. **Linux 7.3 is the first rel
 | 0006 | `lenovo-yb9-kbdock` | New driver: detects keyboard dock attach/detach and exposes dock position | [c9b5c8ff065d](https://git.kernel.org/torvalds/c/c9b5c8ff065d) | 7.3 |
 | 0007 | `lenovo-ymc` | Skip probe on this model so the dock driver is the only tablet-mode switch | [bdd0f4e3333f](https://git.kernel.org/torvalds/c/bdd0f4e3333f) | 7.3 |
 
-On kernels older than 7.3, patches 0002, 0006 and 0007 must be built locally (0001, 0003 and 0005 as well on 7.1). Without 0006 the touchpad cannot auto-activate when the keyboard is docked. See the patch documentation and `rebuild-patches.sh` here: https://bitbucket.org/carvsdriver/lenovoyoga9ibook/src/main/
+On kernels older than 7.3, patches 0002, 0006 and 0007 must be built locally (0001, 0003 and 0005 as well on 7.1). Without 0006 the touchpad cannot auto-activate when the keyboard is docked. See the patch documentation and `rebuild-patches.sh` here: https://github.com/carvsdriver/yoga-book-9-linux
 
 ## Install (Fedora)
 

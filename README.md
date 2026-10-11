@@ -4,16 +4,19 @@ On-screen touchpad daemon and KCM for the **Lenovo Yoga Book 9 14IAH10**.
 
 The Yoga Book 9 has a second screen on the bottom half. When the keyboard dock is attached, the lower portion of that screen functions as a touchpad. This project intercepts raw multitouch events from the INGENIC touchscreen controller, translates them into standard pointer and gesture input, and exposes a System Settings panel for configuration.
 
+![On-Screen Touchpad settings in KDE System Settings](docs/kcm-settings.png)
+
 ## Features
 
 - **Pointer movement** — single-finger cursor control with configurable speed
 - **Tap-to-click** — single-finger tap emits left click
 - **Physical button strip** — configurable 0 / 1 / 2 / 3-button layout along the bottom edge
-- **Two-finger scroll** — vertical scroll with configurable speed
+- **Two-finger scroll** — vertical scroll with configurable speed and optional inverted direction
 - **Two-finger tap** — right click
 - **Two-finger pinch/spread** — Ctrl+Wheel (application zoom)
 - **Two-finger rotate** — REL_DIAL events (understood by audio knobs, drawing apps, etc.)
 - **Three-finger horizontal swipe** — Ctrl+Alt+Left/Right (KDE virtual desktop switching)
+- **Four-finger swipe up** — show desktop
 - **Screen rotation suppression** — pauses `rotate-screens.sh` while the touchpad is active
 - **Window management** — moves windows from the bottom screen to the top screen while the touchpad is active, and restores them on deactivation
 - **Panel management** — moves taskbar panels to the top screen while the touchpad is active
@@ -83,12 +86,14 @@ Settings are stored in `~/.config/plasma-touchpadrc` under `[Touchpad]`.
 |-----|------|---------|-------------|
 | `pointerSpeed` | double | 0.3 | Cursor speed multiplier (0.1 – 2.0) |
 | `scrollSpeed` | double | 1.0 | Scroll speed multiplier (0.1 – 2.0) |
+| `invertScroll` | bool | false | Reverse two-finger scroll direction |
 | `buttonCount` | int | 3 | Physical button strip: 0 = none, 1 / 2 / 3 = buttons |
 | `tapToClick` | bool | true | Single-finger tap → left click |
 | `twoFingerRightClick` | bool | true | Two-finger tap → right click |
 | `twoFingerRotate` | bool | true | Two-finger rotate → REL_DIAL |
 | `pinchZoom` | bool | true | Pinch/spread → Ctrl+Wheel |
 | `threeFingerSwipe` | bool | true | Three-finger horizontal swipe → virtual desktop switch |
+| `fourFingerShowDesktop` | bool | true | Four-finger swipe up → show desktop |
 | `disableRotation` | bool | true | Pause screen rotation script while touchpad is active |
 | `colorScheme` | string | system | Overlay theme: `system`, `light`, `dark` |
 

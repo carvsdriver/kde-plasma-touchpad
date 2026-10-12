@@ -29,6 +29,15 @@ static constexpr const char *BOTTOM_SCREEN = "eDP-2";
 static constexpr int OVERLAY_TRIM_TOP_HALF = 115;  // keyboard on top
 static constexpr int OVERLAY_TRIM_BOTTOM_HALF = 110;  // keyboard on bottom
 
+static QScreen *findBottomScreen()
+{
+    for (QScreen *s : QGuiApplication::screens()) {
+        if (s->name() == QLatin1String(BOTTOM_SCREEN))
+            return s;
+    }
+    return nullptr;
+}
+
 static Settings loadFromConfig()
 {
     Settings s;
@@ -96,7 +105,7 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     m_touchRetryTimer->setSingleShot(true);
     m_touchRetryTimer->setInterval(2000);
     connect(m_touchRetryTimer, &QTimer::timeout, this, [this]() {
-        if (!m_view)
+        if (!m_active)
             return;
         if (!m_touch->start()) {
             qWarning() << "TouchpadOverlay: touch start retry failed, retrying in 2 s";
@@ -115,44 +124,50 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
         QStringLiteral("configChanged"),
         this, SLOT(reloadSettings()));
 
-    // Workaround for Qt crash when the compositor adds or removes a Wayland
-    // output while QWaylandWindow surfaces are alive.  Qt's internal
-    // handleScreensChanged() slot calls calculateScreenFromSurfaceEvents()
-    // → QWindow::screen(), which crashes if a wl_output is not yet (or no
-    // longer) mapped to a QScreen — for example during a suspend/resume cycle
-    // when the compositor re-announces its outputs.
-    //
-    // We connect here (in the constructor, before any QQuickView is ever
-    // created) so our slots are registered before QWaylandWindow's own
-    // screenAdded/screenRemoved connections (which are added when QQuickView
-    // is constructed in createOverlayImpl).  Qt dispatches DirectConnection
-    // slots in registration order, so our slot runs first.  We destroy the
-    // overlay in our slot; once the QWaylandWindow is deleted it
-    // auto-disconnects, and its stale handler is never invoked.
-    auto onScreenTopologyChanged = [this](QScreen *screen) {
-        if (!m_view)
-            return;
-        qWarning() << "TouchpadOverlay: screen topology changed (" << screen->name()
-                   << ") while overlay alive; hiding to avoid Qt SEGV, will recreate";
-        const DockPosition pos = m_pendingPosition;
-        hide();
-        // Wait 1.5 s for the compositor to finish announcing all outputs before
-        // recreating the overlay.
-        QTimer::singleShot(1500, this, [this, pos]() {
-            if (!m_view && pos != DockPosition::Detached)
-                show(pos);
-        });
-    };
+    // Follow eDP-2 coming and going (suspend/resume re-announces every
+    // output).  Both handlers only inspect the screen and defer any window
+    // work, so nothing is shown, hidden or deleted while Qt is still inside
+    // its own output-change dispatch.
     connect(qGuiApp, &QGuiApplication::screenAdded,
-            this, onScreenTopologyChanged, Qt::DirectConnection);
+            this, &TouchpadOverlay::onScreenAdded);
     connect(qGuiApp, &QGuiApplication::screenRemoved,
-            this, onScreenTopologyChanged, Qt::DirectConnection);
-
+            this, &TouchpadOverlay::onScreenRemoved);
 }
 
 TouchpadOverlay::~TouchpadOverlay()
 {
     hide();
+    delete m_view;
+    delete m_blackout;
+}
+
+void TouchpadOverlay::onScreenAdded(QScreen *screen)
+{
+    if (screen->name() != QLatin1String(BOTTOM_SCREEN))
+        return;
+    if (m_active || m_pendingPosition == DockPosition::Detached)
+        return;
+    // Give the compositor time to finish announcing all outputs before the
+    // overlay is shown again.
+    qDebug() << "TouchpadOverlay:" << BOTTOM_SCREEN << "added; showing overlay in 1.5 s";
+    m_showTimer->start(1500);
+}
+
+void TouchpadOverlay::onScreenRemoved(QScreen *screen)
+{
+    if (screen->name() != QLatin1String(BOTTOM_SCREEN) || !m_active)
+        return;
+    // The QScreen is about to be deleted; Qt moves our (still valid) windows
+    // elsewhere on its own.  Hide them once Qt has finished, keeping the
+    // requested position so onScreenAdded() can bring the overlay back.
+    qDebug() << "TouchpadOverlay:" << BOTTOM_SCREEN << "removed; hiding overlay";
+    QMetaObject::invokeMethod(this, [this]() {
+        deactivate();
+        // eDP-2 may already be back (onScreenAdded() ignored it while the
+        // overlay was still active); if so, schedule the re-show here.
+        if (m_pendingPosition != DockPosition::Detached && findBottomScreen())
+            m_showTimer->start(1500);
+    }, Qt::QueuedConnection);
 }
 
 QRectF TouchpadOverlay::overlayRect(DockPosition position) const
@@ -187,21 +202,21 @@ bool TouchpadOverlay::isInTentMode() const
 
 void TouchpadOverlay::show(DockPosition position)
 {
-    // Destroy any existing overlay before doing anything with screens.
-    // This ensures no QWaylandWindow is alive when kscreen-doctor triggers
-    // Wayland output-reconfiguration events — those events call
-    // updateBufferTransform() which dereferences QWindow::screen(), and if
-    // screen() is transiently null during the compositor reconfiguration the
-    // process SEGVs.
-    if (m_view)
-        hide();
+    // Hide any visible overlay before doing anything with screens, so no
+    // layer surface is mapped while kscreen-doctor reconfigures outputs.  This
+    // is also how a position change is applied: hide, then show with the new
+    // anchors and size.
+    m_showTimer->stop();
+    deactivate();
 
     m_pendingPosition = position;
+    if (position == DockPosition::Detached)
+        return;
 
     if (isInTentMode()) {
         // In tent mode both screens share the same origin; force clamshell
-        // layout without blocking.  Defer window creation so the Wayland
-        // output events from kscreen-doctor arrive while no window exists.
+        // layout without blocking.  Defer showing the overlay so the Wayland
+        // output events from kscreen-doctor arrive while it is hidden.
         qDebug() << "TouchpadOverlay: screens overlap (tent mode); forcing clamshell rotation";
         QProcess::execute(QStringLiteral("kscreen-doctor"), {
             QStringLiteral("output.eDP-1.rotation.inverted"),
@@ -216,22 +231,86 @@ void TouchpadOverlay::show(DockPosition position)
     createOverlayImpl();
 }
 
+void TouchpadOverlay::ensureWindows()
+{
+    if (m_view)
+        return;
+
+    // Full-screen black layer on eDP-2, sits behind the touchpad overlay.
+    // LayerTop (2) is below LayerOverlay (3), so the touchpad renders on top.
+    m_blackout = new QQuickView();
+    m_blackout->setResizeMode(QQuickView::SizeRootObjectToView);
+    m_blackout->setSource(QUrl(QStringLiteral("qrc:/org/kde/plasma/touchpad/qml/Blackout.qml")));
+    m_blackout->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+
+    m_blackoutLayerWindow = LayerShellQt::Window::get(m_blackout);
+    m_blackoutLayerWindow->setLayer(LayerShellQt::Window::LayerTop);
+    m_blackoutLayerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+    m_blackoutLayerWindow->setScope(QStringLiteral("plasma-touchpad-blackout"));
+    m_blackoutLayerWindow->setExclusiveZone(-1);
+    // If the compositor dismisses the surface (e.g. its output goes away),
+    // don't let LayerShellQt close() the window; onScreenRemoved() hides it.
+    m_blackoutLayerWindow->setCloseOnDismissed(false);
+    m_blackoutLayerWindow->setAnchors(LayerShellQt::Window::Anchors(
+        LayerShellQt::Window::AnchorLeft |
+        LayerShellQt::Window::AnchorRight |
+        LayerShellQt::Window::AnchorTop |
+        LayerShellQt::Window::AnchorBottom));
+    m_blackoutLayerWindow->setDesiredSize(QSize(0, 0)); // compositor fills all-anchored surface
+
+    connect(m_blackout, &QWindow::screenChanged, this, [this](QScreen *s) {
+        if (!m_active || !s || s->name() == QLatin1String(BOTTOM_SCREEN))
+            return;
+        if (QScreen *screen = findBottomScreen())
+            m_blackoutLayerWindow->setScreen(screen);
+    });
+
+    // Create the QML overlay window.
+    m_view = new QQuickView();
+    m_view->setResizeMode(QQuickView::SizeRootObjectToView);
+    m_view->setSource(QUrl(QStringLiteral("qrc:/org/kde/plasma/touchpad/qml/Touchpad.qml")));
+    m_view->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+
+    // Configure as a LayerShell overlay surface.  Screen, anchors and size
+    // depend on the dock position and are set in createOverlayImpl().
+    m_layerWindow = LayerShellQt::Window::get(m_view);
+    m_layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
+    m_layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+    m_layerWindow->setScope(QStringLiteral("plasma-touchpad"));
+    m_layerWindow->setExclusiveZone(-1); // don't push other surfaces away
+    m_layerWindow->setCloseOnDismissed(false);
+
+    connect(m_view, &QWindow::screenChanged, this, [this](QScreen *s) {
+        const QString name = s ? s->name() : QStringLiteral("(null)");
+        qDebug() << "TouchpadOverlay: overlay screen changed to" << name;
+        if (!m_active || !s || s->name() == QLatin1String(BOTTOM_SCREEN))
+            return;
+        // KWin moved the overlay off eDP-2 (probably because it reassigned the
+        // active screen after windows were moved).  Re-pin by calling setScreen
+        // again — this triggers LayerShellQt to recreate the surface on eDP-2.
+        qDebug() << "TouchpadOverlay: re-pinning overlay back to" << BOTTOM_SCREEN;
+        if (QScreen *screen = findBottomScreen()) {
+            m_layerWindow->setScreen(screen);
+            m_view->show();
+            return;
+        }
+        qWarning() << "TouchpadOverlay: eDP-2 not found in screen list, cannot re-pin";
+    });
+}
+
 void TouchpadOverlay::createOverlayImpl()
 {
-    // Find the bottom screen
-    QScreen *targetScreen = nullptr;
-    for (QScreen *s : QGuiApplication::screens()) {
-        if (s->name() == QLatin1String(BOTTOM_SCREEN)) {
-            targetScreen = s;
-            m_screenW = static_cast<int>(s->geometry().width());
-            m_screenH = static_cast<int>(s->geometry().height());
-            break;
-        }
-    }
+    if (m_active || m_pendingPosition == DockPosition::Detached)
+        return;
+
+    QScreen *targetScreen = findBottomScreen();
     if (!targetScreen) {
+        // onScreenAdded() shows the overlay once eDP-2 appears.
         qWarning() << "TouchpadOverlay: screen" << BOTTOM_SCREEN << "not found";
         return;
     }
+    m_screenW = static_cast<int>(targetScreen->geometry().width());
+    m_screenH = static_cast<int>(targetScreen->geometry().height());
 
     const Settings s = loadFromConfig();
 
@@ -246,61 +325,21 @@ void TouchpadOverlay::createOverlayImpl()
     // send wl_output.transform events to alive surfaces; if one arrives while
     // a QWaylandWindow is alive, QWaylandWindow::updateBufferTransform() calls
     // QWindow::screen() which crashes when the screen is transiently null
-    // during output reconfiguration.  Suppression is lifted in hide().
+    // during output reconfiguration.  Suppression is lifted in deactivate().
     setRotationSuppressed(true);
 
-    // Full-screen black layer on eDP-2, sits behind the touchpad overlay.
-    // LayerTop (2) is below LayerOverlay (3), so the touchpad renders on top.
-    m_blackout = new QQuickView();
-    m_blackout->setResizeMode(QQuickView::SizeRootObjectToView);
-    m_blackout->setSource(QUrl(QStringLiteral("qrc:/org/kde/plasma/touchpad/qml/Blackout.qml")));
-    m_blackout->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    ensureWindows();
+
     m_blackout->setScreen(targetScreen);
-
-    m_blackoutLayerWindow = LayerShellQt::Window::get(m_blackout);
-    m_blackoutLayerWindow->setLayer(LayerShellQt::Window::LayerTop);
-    m_blackoutLayerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-    m_blackoutLayerWindow->setScope(QStringLiteral("plasma-touchpad-blackout"));
-    m_blackoutLayerWindow->setExclusiveZone(-1);
     m_blackoutLayerWindow->setScreen(targetScreen);
-    m_blackoutLayerWindow->setAnchors(LayerShellQt::Window::Anchors(
-        LayerShellQt::Window::AnchorLeft |
-        LayerShellQt::Window::AnchorRight |
-        LayerShellQt::Window::AnchorTop |
-        LayerShellQt::Window::AnchorBottom));
-    m_blackoutLayerWindow->setDesiredSize(QSize(0, 0)); // compositor fills all-anchored surface
-
-    connect(m_blackout, &QWindow::screenChanged, this, [this](QScreen *s) {
-        if (!m_blackoutLayerWindow || !s || s->name() == QLatin1String(BOTTOM_SCREEN))
-            return;
-        for (QScreen *screen : QGuiApplication::screens()) {
-            if (screen->name() == QLatin1String(BOTTOM_SCREEN)) {
-                m_blackoutLayerWindow->setScreen(screen);
-                return;
-            }
-        }
-    });
-
     m_blackout->show();
 
-    // Create the QML overlay window.
-    // Context properties must be set before setSource() triggers QML loading.
-    m_view = new QQuickView();
-    m_view->setResizeMode(QQuickView::SizeRootObjectToView);
-    m_view->setSource(QUrl(QStringLiteral("qrc:/org/kde/plasma/touchpad/qml/Touchpad.qml")));
-    m_view->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-    // Pin Qt's own screen tracking to eDP-2 before LayerShellQt attaches.
-    // LayerShellQt falls back to QWindow::screen() when its own screen property
-    // is not set, so both must agree to ensure the overlay lands on eDP-2
-    // regardless of which screen is currently active/primary.
+    // Pin Qt's own screen tracking to eDP-2 before the layer surface is
+    // created.  LayerShellQt falls back to QWindow::screen() when its own
+    // screen property is not set, so both must agree to ensure the overlay
+    // lands on eDP-2 regardless of which screen is currently active/primary.
     m_view->setScreen(targetScreen);
 
-    // Configure as a LayerShell overlay surface pinned to eDP-2.
-    m_layerWindow = LayerShellQt::Window::get(m_view);
-    m_layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-    m_layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-    m_layerWindow->setScope(QStringLiteral("plasma-touchpad"));
-    m_layerWindow->setExclusiveZone(-1); // don't push other surfaces away
     // Explicitly pin the LayerShell surface to eDP-2.  setScreen() stores the
     // QScreen* in LayerShellQt::WindowPrivate and uses it directly when the
     // zwlr_layer_surface_v1 is created at show() time, avoiding the "placeholder
@@ -322,26 +361,8 @@ void TouchpadOverlay::createOverlayImpl()
                                                                      : OVERLAY_TRIM_TOP_HALF;
     m_layerWindow->setDesiredSize(QSize(0, m_screenH / 2 - trim));
 
-    connect(m_view, &QWindow::screenChanged, this, [this](QScreen *s) {
-        const QString name = s ? s->name() : QStringLiteral("(null)");
-        qDebug() << "TouchpadOverlay: overlay screen changed to" << name;
-        if (!m_layerWindow || !s || s->name() == QLatin1String(BOTTOM_SCREEN))
-            return;
-        // KWin moved the overlay off eDP-2 (probably because it reassigned the
-        // active screen after windows were moved).  Re-pin by calling setScreen
-        // again — this triggers LayerShellQt to recreate the surface on eDP-2.
-        qDebug() << "TouchpadOverlay: re-pinning overlay back to" << BOTTOM_SCREEN;
-        for (QScreen *screen : QGuiApplication::screens()) {
-            if (screen->name() == QLatin1String(BOTTOM_SCREEN)) {
-                m_layerWindow->setScreen(screen);
-                m_view->show();
-                return;
-            }
-        }
-        qWarning() << "TouchpadOverlay: eDP-2 not found in screen list, cannot re-pin";
-    });
-
     m_view->show();
+    m_active = true;
 
     const QRectF touchRect = overlayRect(m_pendingPosition);
     m_touch->setScreenSize(m_screenW, m_screenH);
@@ -376,13 +397,13 @@ void TouchpadOverlay::applySettings(const Settings &s)
     // Always suppress rotation while the overlay is visible, regardless of
     // the disableRotation setting.  The rotation script calls kscreen-doctor
     // which triggers wl_output.transform events that crash updateBufferTransform
-    // when any QWaylandWindow is alive.  Rotation is re-enabled in hide().
-    setRotationSuppressed(m_view != nullptr);
+    // when any QWaylandWindow is alive.  Rotation is re-enabled in deactivate().
+    setRotationSuppressed(m_active);
 }
 
 void TouchpadOverlay::reloadSettings()
 {
-    if (!m_view)
+    if (!m_active)
         return;
     applySettings(loadFromConfig());
     qDebug() << "TouchpadOverlay: settings reloaded";
@@ -391,8 +412,16 @@ void TouchpadOverlay::reloadSettings()
 
 void TouchpadOverlay::hide()
 {
-    if (!m_view)
+    m_pendingPosition = DockPosition::Detached;
+    m_showTimer->stop();
+    deactivate();
+}
+
+void TouchpadOverlay::deactivate()
+{
+    if (!m_active)
         return;
+    m_active = false;
 
     m_touchRetryTimer->stop();
     m_touch->stop();
@@ -402,15 +431,9 @@ void TouchpadOverlay::hide()
     setVirtualKeyboardEnabled(true);
     setRotationSuppressed(false);
 
-    m_blackoutLayerWindow = nullptr;
+    // Hide, never delete: the views are reused by the next show().
     m_blackout->hide();
-    delete m_blackout;
-    m_blackout = nullptr;
-
-    m_layerWindow = nullptr;
     m_view->hide();
-    delete m_view;
-    m_view = nullptr;
 
     qDebug() << "TouchpadOverlay: hidden";
 }
@@ -458,7 +481,7 @@ void TouchpadOverlay::onVirtualKeyboardPropertyChanged(const QString &iface,
 {
     if (iface != QLatin1String("org.kde.kwin.VirtualKeyboard"))
         return;
-    if (!m_view)
+    if (!m_active)
         return;  // overlay not visible — don't interfere
 
     const auto it = changed.find(QStringLiteral("enabled"));

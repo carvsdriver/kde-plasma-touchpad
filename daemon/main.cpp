@@ -11,6 +11,9 @@ int main(int argc, char *argv[])
     app.setApplicationName(QStringLiteral("plasma-touchpad"));
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setOrganizationDomain(QStringLiteral("kde.org"));
+    // The overlay windows are hidden and shown, never closed for good; the
+    // daemon must keep running with no visible window.
+    app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;
     parser.setApplicationDescription(

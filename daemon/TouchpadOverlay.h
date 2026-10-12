@@ -9,6 +9,7 @@
 
 namespace LayerShellQt { class Window; }
 class QQuickView;
+class QScreen;
 
 namespace PlasmaTP {
 
@@ -19,15 +20,20 @@ class PanelMover;
 /*
  * TouchpadOverlay manages the full lifecycle of the on-screen touchpad:
  *
- *   show(position) — creates a LayerShell window anchored to eDP-2,
+ *   show(position) — shows a LayerShell window anchored to eDP-2,
  *                    covering the half of the screen not occupied by the
  *                    keyboard.  Moves windows and panels to the top screen.
  *                    Starts TouchInputHandler.
  *
- *   hide()         — destroys the overlay window, restores windows/panels,
+ *   hide()         — hides the overlay window, restores windows/panels,
  *                    stops TouchInputHandler.
  *
- * The overlay is a QQuickView loaded from qml/Touchpad.qml.
+ * The overlay is a QQuickView loaded from qml/Touchpad.qml.  The overlay and
+ * blackout views are created once and only shown/hidden afterwards: deleting
+ * a QWindow while Qt is reshuffling Wayland outputs (suspend/resume, rotation)
+ * can leave an orphaned QWaylandWindow behind that later dereferences the
+ * freed QWindow and crashes.  Hiding keeps the QWindow alive and drops the
+ * layer surface; showing again creates a fresh layer surface.
  *
  * Screen geometry assumptions (2880×1800 per screen):
  *   TopHalf    dock → overlay occupies bottom half: y=900, h=900
@@ -54,7 +60,11 @@ private:
     QRectF overlayRect(DockPosition position) const;
     void applySettings(const Settings &s);
     bool isInTentMode() const;
+    void ensureWindows();
     void createOverlayImpl();
+    void deactivate();
+    void onScreenAdded(QScreen *screen);
+    void onScreenRemoved(QScreen *screen);
     void setRotationSuppressed(bool suppress);
     void setVirtualKeyboardEnabled(bool enabled);
     void watchVirtualKeyboard();
@@ -74,7 +84,11 @@ private:
     QTimer *m_buttonHighlightTimer = nullptr;
     QTimer *m_showTimer = nullptr;
     QTimer *m_touchRetryTimer = nullptr;
+    // Requested dock position; Detached once hide() is called.  Kept across
+    // internal deactivations (eDP-2 going away) so the overlay can come back.
     DockPosition m_pendingPosition = DockPosition::Detached;
+    // True while the overlay is shown and touch input is running.
+    bool m_active = false;
 };
 
 } // namespace PlasmaTP

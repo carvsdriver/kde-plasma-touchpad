@@ -1,5 +1,5 @@
 Name:           plasma-touchpad
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        On-screen touchpad daemon for Lenovo Yoga Book 9
 
@@ -81,5 +81,9 @@ echo 'enable plasma-touchpad.service' \
 %{_datadir}/applications/kcm_yoga9_onscreen_touchpad.desktop
 
 %changelog
+* Tue Oct 13 2026 Dave Carey <carvsdriver@gmail.com> - 0.1.1-1
+- Fix daemon crash shortly after resume from suspend: keep overlay
+  windows alive across hide/show instead of recreating them
+
 * Thu May 14 2026 Dave Carey <carvsdriver@gmail.com> - 0.1.0-1
 - Initial package

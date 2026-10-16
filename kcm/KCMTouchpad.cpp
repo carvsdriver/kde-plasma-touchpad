@@ -26,6 +26,7 @@ void KCMTouchpad::load()
     setColorScheme(grp.readEntry("colorScheme", s.colorScheme));
     setButtonCount(grp.readEntry("buttonCount", s.buttonCount));
     setPointerSpeed(grp.readEntry("pointerSpeed", s.pointerSpeed));
+    setPointerAcceleration(grp.readEntry("pointerAcceleration", s.pointerAcceleration));
     setScrollSpeed(grp.readEntry("scrollSpeed", s.scrollSpeed));
     setDisableRotation(grp.readEntry("disableRotation", s.disableRotation));
     setThreeFingerSwipe(grp.readEntry("threeFingerSwipe", s.threeFingerSwipe));
@@ -45,6 +46,7 @@ void KCMTouchpad::save()
     grp.writeEntry("colorScheme", m_colorScheme);
     grp.writeEntry("buttonCount", m_buttonCount);
     grp.writeEntry("pointerSpeed", m_pointerSpeed);
+    grp.writeEntry("pointerAcceleration", m_pointerAcceleration);
     grp.writeEntry("scrollSpeed", m_scrollSpeed);
     grp.writeEntry("disableRotation", m_disableRotation);
     grp.writeEntry("threeFingerSwipe", m_threeFingerSwipe);
@@ -70,6 +72,7 @@ void KCMTouchpad::defaults()
     setColorScheme(s.colorScheme);
     setButtonCount(s.buttonCount);
     setPointerSpeed(s.pointerSpeed);
+    setPointerAcceleration(s.pointerAcceleration);
     setScrollSpeed(s.scrollSpeed);
     setDisableRotation(s.disableRotation);
     setThreeFingerSwipe(s.threeFingerSwipe);

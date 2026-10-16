@@ -4,6 +4,9 @@
 #include <QDebug>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusVariant>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -21,8 +24,21 @@ static constexpr const char *TOUCH_DEVICE_NAME =
 
 static constexpr double BUTTON_STRIP_Y = 0.88;
 // Per-frame raw-unit jitter floor: deltas smaller than this are sensor noise when
-// the finger is nearly stationary and are discarded rather than accumulated.
+// the finger is nearly stationary.  Used by gesture classification; cursor
+// motion uses the hysteresis filter below instead.
 static constexpr int JITTER_THRESHOLD_RAW = 5;
+// Cursor hysteresis radius (raw units, 100/mm on this panel).  Noise from a
+// resting finger stays inside it; any sustained motion, however slow, leaves it.
+static constexpr double CURSOR_HYSTERESIS_RAW = 8.0;
+// Finger speed is measured over this much recent history, which smooths out
+// uneven report intervals and single-frame position noise.
+static constexpr qint64 VELOCITY_WINDOW_US = 50000;
+// Pointer acceleration curve, in finger speed (mm/s).  Below SLOW the gain
+// drops for precise positioning, SLOW..FAST is 1:1, and above FAST it rises
+// until MAX, where it is capped.
+static constexpr double ACCEL_SPEED_SLOW = 25.0;
+static constexpr double ACCEL_SPEED_FAST = 70.0;
+static constexpr double ACCEL_SPEED_MAX  = 350.0;
 static constexpr int TAP_THRESHOLD_RAW = 400;
 // 2-finger gesture classification thresholds.
 // SCROLL: hi-res units (cDY * scrollSpeed * 6) before committing.  Must be > 3 ×
@@ -44,6 +60,22 @@ static constexpr double GESTURE_CLASSIFY_ROTATE = 8.0;
 static void uinputSetBit(int fd, int request, int bit)
 {
     ::ioctl(fd, request, bit);
+}
+
+// Gain multiplier for a finger speed in mm/s.  amount 0 disables the curve;
+// 1 gives the strongest slow-down for precision and speed-up for flicks.
+static double accelerationFactor(double speedMmPerSec, double amount)
+{
+    if (amount <= 0.0)
+        return 1.0;
+    const double minFactor = 1.0 - 0.5 * amount;
+    const double maxFactor = 1.0 + 3.0 * amount;
+    if (speedMmPerSec < ACCEL_SPEED_SLOW)
+        return minFactor + (1.0 - minFactor) * speedMmPerSec / ACCEL_SPEED_SLOW;
+    if (speedMmPerSec <= ACCEL_SPEED_FAST)
+        return 1.0;
+    const double t = (speedMmPerSec - ACCEL_SPEED_FAST) / (ACCEL_SPEED_MAX - ACCEL_SPEED_FAST);
+    return std::min(maxFactor, 1.0 + (maxFactor - 1.0) * t);
 }
 
 // ─── ctor/dtor ──────────────────────────────────────────────────────────────
@@ -122,6 +154,8 @@ bool TouchInputHandler::openTouchscreen()
             ::ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), &absY);
             m_absXMin = absX.minimum; m_absXMax = absX.maximum;
             m_absYMin = absY.minimum; m_absYMax = absY.maximum;
+            if (absX.resolution > 0)
+                m_rawPerMm = absX.resolution;
 
             if (::ioctl(fd, EVIOCGRAB, 1) < 0)
                 qWarning() << "TouchInputHandler: EVIOCGRAB failed";
@@ -172,7 +206,57 @@ bool TouchInputHandler::openUinput()
     }
 
     qDebug() << "TouchInputHandler: uinput virtual pointer created";
+
+    // The daemon applies its own acceleration curve, so libinput's must be
+    // flat or the two would compound.  KWin exposes the device as
+    // /org/kde/KWin/InputDevice/eventN once it has picked it up.
+    ++m_uinputGeneration;
+    char sysname[64] = {};
+    if (::ioctl(m_uinputFd, UI_GET_SYSNAME(sizeof(sysname)), sysname) >= 0) {
+        const QDir sysDir(QStringLiteral("/sys/devices/virtual/input/") + QLatin1String(sysname));
+        const QStringList events = sysDir.entryList(QStringList{QStringLiteral("event*")}, QDir::Dirs);
+        if (!events.isEmpty())
+            disableLibinputAcceleration(events.first(), 0);
+    }
     return true;
+}
+
+void TouchInputHandler::disableLibinputAcceleration(const QString &eventNode, int attempt)
+{
+    static constexpr int MAX_ATTEMPTS = 10;
+    const int generation = m_uinputGeneration;
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/org/kde/KWin/InputDevice/") + eventNode,
+        QStringLiteral("org.freedesktop.DBus.Properties"),
+        QStringLiteral("Set"));
+    msg << QStringLiteral("org.kde.KWin.InputDevice")
+        << QStringLiteral("pointerAccelerationProfileFlat")
+        << QVariant::fromValue(QDBusVariant(true));
+
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, eventNode, attempt, generation](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        if (generation != m_uinputGeneration)
+            return;
+        if (!w->isError()) {
+            qDebug() << "TouchInputHandler: libinput acceleration set to flat on" << eventNode;
+            return;
+        }
+        // KWin may not have added the device yet.
+        if (attempt + 1 < MAX_ATTEMPTS) {
+            QTimer::singleShot(200, this, [this, eventNode, attempt, generation] {
+                if (generation == m_uinputGeneration)
+                    disableLibinputAcceleration(eventNode, attempt + 1);
+            });
+        } else {
+            qWarning() << "TouchInputHandler: could not set flat acceleration on"
+                       << eventNode << w->error().message();
+        }
+    });
 }
 
 // ─── event processing ───────────────────────────────────────────────────────
@@ -215,27 +299,37 @@ void TouchInputHandler::touchReadyRead(int fd)
                 }
                 break;
 
+            // prevX/prevY are snapshotted after each SYN_REPORT rather than
+            // here: the kernel omits unchanged axes, so updating prev only on
+            // an axis event would replay the last delta on frames where just
+            // the other axis moved.
             case ABS_MT_POSITION_X:
-                if (m_slots[m_currentSlot].firstMove)
+                if (m_slots[m_currentSlot].firstMove) {
                     m_slots[m_currentSlot].startX = ev.value;
-                m_slots[m_currentSlot].prevX = m_slots[m_currentSlot].firstMove
-                    ? ev.value : m_slots[m_currentSlot].x;
+                    m_slots[m_currentSlot].prevX = ev.value;
+                }
                 m_slots[m_currentSlot].x = ev.value;
                 break;
 
             case ABS_MT_POSITION_Y:
-                if (m_slots[m_currentSlot].firstMove)
+                if (m_slots[m_currentSlot].firstMove) {
                     m_slots[m_currentSlot].startY = ev.value;
-                m_slots[m_currentSlot].prevY = m_slots[m_currentSlot].firstMove
-                    ? ev.value : m_slots[m_currentSlot].y;
+                    m_slots[m_currentSlot].prevY = ev.value;
+                }
                 m_slots[m_currentSlot].y = ev.value;
                 break;
             }
             break;
 
         case EV_SYN:
-            if (ev.code == SYN_REPORT)
+            if (ev.code == SYN_REPORT) {
+                m_frameTimeUs = qint64(ev.input_event_sec) * 1000000 + ev.input_event_usec;
                 processSyncReport();
+                for (Slot &slot : m_slots) {
+                    slot.prevX = slot.x;
+                    slot.prevY = slot.y;
+                }
+            }
             else if (ev.code == SYN_DROPPED)
                 m_pendingDrop = true;
             break;
@@ -314,6 +408,7 @@ void TouchInputHandler::recoverFromDrop()
     m_twoFingerCleanLiftCount = 0;
     m_pendingCursorDX = 0;
     m_pendingCursorDY = 0;
+    m_cursorTrackingId = -1;
 
     qDebug() << "TouchInputHandler: SYN_DROPPED — slot state re-synced from kernel";
 }
@@ -351,6 +446,7 @@ void TouchInputHandler::processSyncReport()
         m_gestureLiftedCount = 0;
         m_accumDX = 0.0;
         m_accumDY = 0.0;
+        m_cursorTrackingId = -1;
         m_pendingCursorDX = 0;
         m_pendingCursorDY = 0;
         m_scrollAccum = 0.0;
@@ -581,21 +677,79 @@ void TouchInputHandler::processOneFingerMove(int activeCount, int primarySlot,
             m_pendingCursorDX = 0;
             m_pendingCursorDY = 0;
         }
-        const int rawDX = s.x - s.prevX;
-        const int rawDY = s.y - s.prevY;
-        if (std::abs(rawDX) + std::abs(rawDY) >= JITTER_THRESHOLD_RAW) {
-            m_accumDX += rawDX * m_pointerSpeed;
-            m_accumDY += rawDY * m_pointerSpeed;
-            const int emitX = static_cast<int>(m_accumDX);
-            const int emitY = static_cast<int>(m_accumDY);
-            if (emitX != 0 || emitY != 0) {
-                m_pendingCursorDX = emitX;
-                m_pendingCursorDY = emitY;
-                m_accumDX -= emitX;
-                m_accumDY -= emitY;
-            }
+        const QPointF delta = cursorDelta(s);
+        m_accumDX += delta.x() * m_pointerSpeed;
+        m_accumDY += delta.y() * m_pointerSpeed;
+        const int emitX = static_cast<int>(m_accumDX);
+        const int emitY = static_cast<int>(m_accumDY);
+        if (emitX != 0 || emitY != 0) {
+            m_pendingCursorDX = emitX;
+            m_pendingCursorDY = emitY;
+            m_accumDX -= emitX;
+            m_accumDY -= emitY;
         }
     }
+}
+
+// Pointer motion (raw units, acceleration applied) for the cursor finger this
+// frame.  Switching to a different finger restarts the filter at its position.
+QPointF TouchInputHandler::cursorDelta(const Slot &s)
+{
+    if (s.id != m_cursorTrackingId) {
+        m_cursorTrackingId = s.id;
+        m_hystX = s.x;
+        m_hystY = s.y;
+        m_motionCount = 0;
+        pushMotionSample(m_hystX, m_hystY);
+        return {};
+    }
+
+    const double ex = s.x - m_hystX;
+    const double ey = s.y - m_hystY;
+    const double dist = std::hypot(ex, ey);
+    double dx = 0.0, dy = 0.0;
+    if (dist > CURSOR_HYSTERESIS_RAW) {
+        // Drag the hysteresis circle so the finger sits on its edge.
+        const double k = (dist - CURSOR_HYSTERESIS_RAW) / dist;
+        dx = ex * k;
+        dy = ey * k;
+        m_hystX += dx;
+        m_hystY += dy;
+    }
+    // Record every frame, moving or not, so speed falls to zero when the
+    // finger stops.
+    pushMotionSample(m_hystX, m_hystY);
+    if (dx == 0.0 && dy == 0.0)
+        return {};
+
+    const double factor = accelerationFactor(cursorSpeedMmPerSec(), m_pointerAccel);
+    return {dx * factor, dy * factor};
+}
+
+void TouchInputHandler::pushMotionSample(double x, double y)
+{
+    m_motion[m_motionHead] = {m_frameTimeUs, x, y};
+    m_motionHead = (m_motionHead + 1) % MOTION_HISTORY;
+    m_motionCount = std::min(m_motionCount + 1, MOTION_HISTORY);
+}
+
+// Average cursor-finger speed over the last VELOCITY_WINDOW_US.
+double TouchInputHandler::cursorSpeedMmPerSec() const
+{
+    if (m_motionCount < 2)
+        return 0.0;
+    const MotionSample &newest = m_motion[(m_motionHead - 1 + MOTION_HISTORY) % MOTION_HISTORY];
+    const MotionSample *oldest = nullptr;
+    for (int i = 2; i <= m_motionCount; ++i) {
+        const MotionSample &sample = m_motion[(m_motionHead - i + MOTION_HISTORY) % MOTION_HISTORY];
+        if (newest.timeUs - sample.timeUs > VELOCITY_WINDOW_US)
+            break;
+        oldest = &sample;
+    }
+    if (!oldest || newest.timeUs <= oldest->timeUs)
+        return 0.0;
+    const double distMm = std::hypot(newest.x - oldest->x, newest.y - oldest->y) / m_rawPerMm;
+    return distMm * 1e6 / double(newest.timeUs - oldest->timeUs);
 }
 
 void TouchInputHandler::processTwoFingerGesture(int primarySlot, int secondarySlot)
@@ -693,18 +847,15 @@ void TouchInputHandler::processTwoFingerGesture(int primarySlot, int secondarySl
         const int sDist  = std::abs(s.x  - s.startX)  + std::abs(s.y  - s.startY);
         const int s2Dist = std::abs(s2.x - s2.startX) + std::abs(s2.y - s2.startY);
         const Slot &mover = (sDist >= s2Dist) ? s : s2;
-        const int rawDX = mover.x - mover.prevX;
-        const int rawDY = mover.y - mover.prevY;
-        if (std::abs(rawDX) + std::abs(rawDY) >= JITTER_THRESHOLD_RAW) {
-            m_accumDX += rawDX * m_pointerSpeed;
-            m_accumDY += rawDY * m_pointerSpeed;
-            const int emitX = static_cast<int>(m_accumDX);
-            const int emitY = static_cast<int>(m_accumDY);
-            if (emitX != 0 || emitY != 0) {
-                emitRelative(emitX, emitY);
-                m_accumDX -= emitX;
-                m_accumDY -= emitY;
-            }
+        const QPointF delta = cursorDelta(mover);
+        m_accumDX += delta.x() * m_pointerSpeed;
+        m_accumDY += delta.y() * m_pointerSpeed;
+        const int emitX = static_cast<int>(m_accumDX);
+        const int emitY = static_cast<int>(m_accumDY);
+        if (emitX != 0 || emitY != 0) {
+            emitRelative(emitX, emitY);
+            m_accumDX -= emitX;
+            m_accumDY -= emitY;
         }
         break;
     }

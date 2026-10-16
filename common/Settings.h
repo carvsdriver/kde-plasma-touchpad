@@ -11,6 +11,7 @@ struct Settings {
     int buttonCount = 3;
     QString colorScheme = QStringLiteral("system");
     double pointerSpeed = 0.3;
+    double pointerAcceleration = 0.5;
     double scrollSpeed = 1.0;
     bool disableRotation = true;
     bool threeFingerSwipe = true;

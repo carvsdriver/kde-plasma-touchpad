@@ -8,7 +8,7 @@ The Yoga Book 9 has a second screen on the bottom half. When the keyboard dock i
 
 ## Features
 
-- **Pointer movement** — single-finger cursor control with configurable speed
+- **Pointer movement** — single-finger cursor control with configurable speed and velocity-based acceleration (slower for precise moves, faster for quick flicks)
 - **Tap-to-click** — single-finger tap emits left click
 - **Physical button strip** — configurable 0 / 1 / 2 / 3-button layout along the bottom edge
 - **Two-finger scroll** — vertical scroll with configurable speed and optional inverted direction
@@ -85,6 +85,7 @@ Settings are stored in `~/.config/plasma-touchpadrc` under `[Touchpad]`.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `pointerSpeed` | double | 0.3 | Cursor speed multiplier (0.1 – 2.0) |
+| `pointerAcceleration` | double | 0.5 | Speed-dependent acceleration (0.0 = off – 1.0) |
 | `scrollSpeed` | double | 1.0 | Scroll speed multiplier (0.1 – 2.0) |
 | `invertScroll` | bool | false | Reverse two-finger scroll direction |
 | `buttonCount` | int | 3 | Physical button strip: 0 = none, 1 / 2 / 3 = buttons |

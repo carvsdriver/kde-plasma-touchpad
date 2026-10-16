@@ -46,6 +46,7 @@ static Settings loadFromConfig()
     s.buttonCount = grp.readEntry("buttonCount", s.buttonCount);
     s.colorScheme = grp.readEntry("colorScheme", s.colorScheme);
     s.pointerSpeed = grp.readEntry("pointerSpeed", s.pointerSpeed);
+    s.pointerAcceleration = grp.readEntry("pointerAcceleration", s.pointerAcceleration);
     s.scrollSpeed = grp.readEntry("scrollSpeed", s.scrollSpeed);
     s.disableRotation = grp.readEntry("disableRotation", s.disableRotation);
     s.threeFingerSwipe = grp.readEntry("threeFingerSwipe", s.threeFingerSwipe);
@@ -53,6 +54,7 @@ static Settings loadFromConfig()
     s.pinchZoom = grp.readEntry("pinchZoom", s.pinchZoom);
     s.tapToClick = grp.readEntry("tapToClick", s.tapToClick);
     s.twoFingerRightClick = grp.readEntry("twoFingerRightClick", s.twoFingerRightClick);
+    s.twoFingerRotate = grp.readEntry("twoFingerRotate", s.twoFingerRotate);
     s.invertScroll = grp.readEntry("invertScroll", s.invertScroll);
     return s;
 }
@@ -386,6 +388,7 @@ void TouchpadOverlay::applySettings(const Settings &s)
         m_view->rootObject()->setProperty("colorScheme", s.colorScheme);
     }
     m_touch->setPointerSpeed(s.pointerSpeed);
+    m_touch->setPointerAcceleration(s.pointerAcceleration);
     m_touch->setScrollSpeed(s.scrollSpeed);
     m_touch->setThreeFingerSwipe(s.threeFingerSwipe);
     m_touch->setFourFingerShowDesktop(s.fourFingerShowDesktop);

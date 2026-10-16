@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointF>
 #include <QRectF>
 #include <QSocketNotifier>
 #include <linux/input.h>
@@ -19,6 +20,7 @@ public:
     void setScreenSize(int w, int h) { m_screenW = w; m_screenH = h; }
 
     void setPointerSpeed(double speed) { m_pointerSpeed = speed; }
+    void setPointerAcceleration(double amount) { m_pointerAccel = qBound(0.0, amount, 1.0); }
     void setScrollSpeed(double speed) { m_scrollSpeed = speed; }
     void setButtonCount(int count) { m_buttonCount = qBound(0, count, 3); }
     void setThreeFingerSwipe(bool enabled) { m_threeFingerSwipeEnabled = enabled; }
@@ -42,25 +44,6 @@ private Q_SLOTS:
     void touchReadyRead(int fd);
 
 private:
-    bool openTouchscreen();
-    bool openUinput();
-    void closeFds();
-    void processSyncReport();
-    void processOneFingerMove(int activeCount, int primarySlot, bool secondaryIsButton,
-                              bool primaryInTouchpad, bool primaryInCenter);
-    void processTwoFingerGesture(int primarySlot, int secondarySlot);
-    void processThreeFingerSwipe(int activeCount);
-    void processFourFingerSwipe(int activeCount);
-    void recoverFromDrop();
-    void handleFingerLift(int slotIdx);
-    void emitRelative(int dx, int dy);
-    void emitButton(int btn, bool press);
-    void emitSync();
-    void switchDesktop(int direction);
-    void emitCtrlScroll(int hiResUnits);
-    void emitDial(int ticks);
-    void writeEv(const input_event &ev);
-
     struct Slot {
         int id = -1;
         bool active = false;
@@ -71,6 +54,30 @@ private:
         bool inButtonStrip = false;
         int buttonIndex = -1;
     };
+
+    bool openTouchscreen();
+    bool openUinput();
+    void closeFds();
+    void disableLibinputAcceleration(const QString &eventNode, int attempt);
+    void processSyncReport();
+    void processOneFingerMove(int activeCount, int primarySlot, bool secondaryIsButton,
+                              bool primaryInTouchpad, bool primaryInCenter);
+    void processTwoFingerGesture(int primarySlot, int secondarySlot);
+    void processThreeFingerSwipe(int activeCount);
+    void processFourFingerSwipe(int activeCount);
+    void recoverFromDrop();
+    QPointF cursorDelta(const Slot &s);
+    void pushMotionSample(double x, double y);
+    double cursorSpeedMmPerSec() const;
+    void handleFingerLift(int slotIdx);
+    void emitRelative(int dx, int dy);
+    void emitButton(int btn, bool press);
+    void emitSync();
+    void switchDesktop(int direction);
+    void emitCtrlScroll(int hiResUnits);
+    void emitDial(int ticks);
+    void writeEv(const input_event &ev);
+
 
     static constexpr int MAX_SLOTS = 10;
     Slot m_slots[MAX_SLOTS];
@@ -104,6 +111,29 @@ private:
     // Sub-pixel accumulator for pointer movement (reset per session)
     double m_accumDX = 0.0;
     double m_accumDY = 0.0;
+
+    // Pointer acceleration: 0 = linear, 1 = strongest curve.
+    double m_pointerAccel = 0.5;
+    // Raw touchscreen units per millimetre (from EVIOCGABS resolution).
+    double m_rawPerMm = 100.0;
+    // Kernel timestamp of the SYN_REPORT currently being processed.
+    qint64 m_frameTimeUs = 0;
+
+    // Motion filter for the finger driving the cursor.  The hysteresis point
+    // only moves once the finger leaves a small circle around it, so a resting
+    // finger's sensor noise is absorbed while slow motion passes through.
+    int m_cursorTrackingId = -1;
+    double m_hystX = 0.0;
+    double m_hystY = 0.0;
+    struct MotionSample { qint64 timeUs; double x, y; };
+    static constexpr int MOTION_HISTORY = 8;
+    MotionSample m_motion[MOTION_HISTORY] = {};
+    int m_motionHead = 0;   // next write index
+    int m_motionCount = 0;
+
+    // Bumped on every uinput device creation so stale libinput-config retries
+    // for a destroyed device stop.
+    int m_uinputGeneration = 0;
 
     // One-frame cursor buffer: movement is held for one sync cycle and only
     // emitted when the finger is confirmed still active the following frame.

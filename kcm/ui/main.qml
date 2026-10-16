@@ -54,6 +54,18 @@ KCM.SimpleKCM {
         }
 
         RowLayout {
+            Kirigami.FormData.label: i18n("Pointer acceleration")
+            QQC2.Slider {
+                id: accelSlider
+                from: 0.0; to: 1.0; stepSize: 0.1
+                value: kcm.pointerAcceleration
+                onMoved: { kcm.pointerAcceleration = value; kcm.needsSave = true }
+                Layout.preferredWidth: 200
+            }
+            QQC2.Label { text: accelSlider.value === 0 ? i18n("Off") : Math.round(accelSlider.value * 100) + "%" }
+        }
+
+        RowLayout {
             Kirigami.FormData.label: i18n("Scroll speed")
             QQC2.Slider {
                 id: scrollSlider

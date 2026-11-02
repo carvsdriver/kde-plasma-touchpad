@@ -29,7 +29,9 @@ The Yoga Book 9 has a second screen on the bottom half. When the keyboard dock i
 
 ### Kernel support
 
-All required kernel changes are merged in mainline. **Linux 7.3 is the first release with full support**, and on 7.3 or later no patches or out-of-tree modules are needed. Fedora's kernel config already enables the dock driver (`CONFIG_LENOVO_YB9_KBDOCK=m`), so the stock Fedora kernel works once it moves to 7.3.
+All required kernel changes are merged in mainline. **Linux 7.3 (released 18 October 2026) is the first release with full support**, and on 7.3 or later no patches or out-of-tree modules are needed. Patches 0002, 0006 and 0007 were not backported to the 7.2.y stable series, so every 7.2.x kernel still needs them built locally.
+
+Fedora's kernel config already enables the dock driver (`CONFIG_LENOVO_YB9_KBDOCK=m`), so the stock Fedora kernel works once it moves to 7.3. As of late October 2026, Rawhide already ships 7.4 development kernels, which include every patch below; Fedora 43, 44 and 45 are still on 7.2.x and need the patched modules until their 7.3 update arrives.
 
 | # | Module | Purpose | Upstream commit | First release |
 |---|--------|---------|-----------------|---------------|

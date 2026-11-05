@@ -21,6 +21,9 @@ struct Settings {
     bool twoFingerRightClick = true;
     bool twoFingerRotate = true;
     bool invertScroll = false;
+    // What the free top half shows when the keyboard is docked on the bottom
+    // half: "touchpad" or "dashboard".
+    QString bottomDockMode = QStringLiteral("touchpad");
 
     static constexpr const char *configFile() { return "plasma-touchpadrc"; }
     static constexpr const char *groupName() { return "Touchpad"; }

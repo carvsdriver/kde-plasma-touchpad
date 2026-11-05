@@ -16,6 +16,7 @@ namespace PlasmaTP {
 class TouchInputHandler;
 class WindowMover;
 class PanelMover;
+class DashboardManager;
 
 /*
  * TouchpadOverlay manages the full lifecycle of the on-screen touchpad:
@@ -27,6 +28,12 @@ class PanelMover;
  *
  *   hide()         — hides the overlay window, restores windows/panels,
  *                    stops TouchInputHandler.
+ *
+ * With the keyboard on the bottom half and bottomDockMode = "dashboard", the
+ * free top half shows Plasma desktop widgets (DashboardManager, removed
+ * again on deactivation) instead: no
+ * touchpad overlay and no touchscreen grab, so touches reach Plasma, and the
+ * blackout covers only the keyboard area.
  *
  * The overlay is a QQuickView loaded from qml/Touchpad.qml.  The overlay and
  * blackout views are created once and only shown/hidden afterwards: deleting
@@ -55,9 +62,13 @@ private Q_SLOTS:
     void onVirtualKeyboardPropertyChanged(const QString &iface,
                                           const QVariantMap &changed,
                                           const QStringList &invalidated);
+    void onScreenLockChanged(bool locked);
 
 private:
+    enum class Mode { Touchpad, Dashboard };
+
     QRectF overlayRect(DockPosition position) const;
+    Mode modeFor(DockPosition position, const Settings &s) const;
     void applySettings(const Settings &s);
     bool isInTentMode() const;
     void ensureWindows();
@@ -68,6 +79,7 @@ private:
     void setRotationSuppressed(bool suppress);
     void setVirtualKeyboardEnabled(bool enabled);
     void watchVirtualKeyboard();
+    void watchScreenLock();
 
     QQuickView *m_blackout = nullptr;
     LayerShellQt::Window *m_blackoutLayerWindow = nullptr;
@@ -76,6 +88,7 @@ private:
     TouchInputHandler *m_touch = nullptr;
     WindowMover *m_windows = nullptr;
     PanelMover *m_panels = nullptr;
+    DashboardManager *m_dashboard = nullptr;
 
     // Bottom screen resolution — read at first show() from QScreen
     int m_screenW = 2880;
@@ -87,8 +100,14 @@ private:
     // Requested dock position; Detached once hide() is called.  Kept across
     // internal deactivations (eDP-2 going away) so the overlay can come back.
     DockPosition m_pendingPosition = DockPosition::Detached;
-    // True while the overlay is shown and touch input is running.
+    // True while the overlay (or dashboard) is shown.
     bool m_active = false;
+    // True while the lock screen is up.  Nothing is shown until it goes
+    // away: the session's windows, panels, wallpaper and widgets are left
+    // alone while the lock screen (which runs inside KWin) is busy.
+    bool m_screenLocked = false;
+    // What the active overlay is showing; meaningful only while m_active.
+    Mode m_mode = Mode::Touchpad;
 };
 
 } // namespace PlasmaTP

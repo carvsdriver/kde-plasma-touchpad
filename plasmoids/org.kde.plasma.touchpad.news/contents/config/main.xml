@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="feeds" type="StringList">
+      <label>RSS or Atom feed URLs</label>
+      <default>https://feeds.npr.org/1001/rss.xml,https://feeds.npr.org/1004/rss.xml,https://feeds.npr.org/1019/rss.xml,https://news.google.com/rss?hl=en-US&amp;gl=US&amp;ceid=US:en,https://9to5linux.com/feed,https://www.linuxtoday.com/feed/</default>
+    </entry>
+    <entry name="selectedFeed" type="String">
+      <label>Address of the feed shown, or empty for all feeds together</label>
+      <default></default>
+    </entry>
+    <entry name="maxItems" type="Int">
+      <label>Most headlines to show</label>
+      <default>30</default>
+      <min>5</min>
+      <max>200</max>
+    </entry>
+    <entry name="refreshMinutes" type="Int">
+      <label>Minutes between refreshes</label>
+      <default>15</default>
+      <min>1</min>
+      <max>1440</max>
+    </entry>
+    <entry name="openIn" type="String">
+      <label>Where headlines open: "widget" (inside the widget) or "browser" (the default browser)</label>
+      <default>widget</default>
+    </entry>
+  </group>
+</kcfg>

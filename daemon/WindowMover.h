@@ -35,6 +35,12 @@ public:
     void moveWindowsToTopScreen();
     // Move only the windows we previously relocated back to eDP-2.
     void restore();
+    // While the keyboard is docked, keep application windows off eDP-2:
+    // a KWin script sends any that end up there (dragged, sent by a
+    // shortcut, or opened there) back to eDP-1.  Started by
+    // moveWindowsToTopScreen(), stopped by restore().
+    void startGuard();
+    void stopGuard();
     // Minimize all normal windows on eDP-1 only (show desktop, top screen).
     void showDesktopTopScreen();
     // Unminimize all normal windows on eDP-1 (restore after show desktop).

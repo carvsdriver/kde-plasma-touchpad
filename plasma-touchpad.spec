@@ -19,12 +19,14 @@ BuildRequires:  gcc-c++
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qtdeclarative-devel
+BuildRequires:  qt6-qtnetworkauth-devel
 
 BuildRequires:  kf6-kconfig-devel
 BuildRequires:  kf6-kcoreaddons-devel
 BuildRequires:  kf6-kcmutils-devel
 BuildRequires:  kf6-ki18n-devel
 BuildRequires:  kf6-kwindowsystem-devel
+BuildRequires:  kf6-kwallet-devel
 
 BuildRequires:  layer-shell-qt-devel
 BuildRequires:  wayland-devel
@@ -79,6 +81,8 @@ echo 'enable plasma-touchpad.service' \
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_yoga9_onscreen_touchpad.so
 %{_datadir}/plasma/kcms/kcm_yoga9_onscreen_touchpad.json
 %{_datadir}/applications/kcm_yoga9_onscreen_touchpad.desktop
+%{_datadir}/plasma/plasmoids/org.kde.plasma.touchpad.news/
+%{_datadir}/plasma/plasmoids/org.kde.plasma.touchpad.youtube/
 
 %changelog
 * Fri Oct 16 2026 Dave Carey <carvsdriver@gmail.com> - 0.1.2-1

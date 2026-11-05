@@ -14,13 +14,14 @@ include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 include(FeatureSummary)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick DBus)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick DBus Network NetworkAuth)
 find_package(KF6 REQUIRED COMPONENTS
     Config       # provides KF6::ConfigCore
     CoreAddons
     I18n
     KCMUtils
     WindowSystem
+    Wallet
 )
 find_package(LayerShellQt REQUIRED)
 
@@ -29,3 +30,4 @@ feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
 add_subdirectory(common)
 add_subdirectory(daemon)
 add_subdirectory(kcm)
+add_subdirectory(plasmoids)

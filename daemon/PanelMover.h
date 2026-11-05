@@ -30,8 +30,6 @@ public:
     void restorePanels();
 
 private:
-    QString runPlasmaScript(const QString &script);
-
     // IDs of panels that were moved (Plasma containment IDs)
     QList<int> m_movedPanelIds;
     bool m_moved = false;

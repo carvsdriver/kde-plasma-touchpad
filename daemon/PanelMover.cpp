@@ -1,15 +1,9 @@
 #include "PanelMover.h"
+#include "PlasmaScript.h"
 
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusReply>
 #include <QDebug>
 
 namespace PlasmaTP {
-
-static constexpr const char *PLASMA_SERVICE = "org.kde.plasmashell";
-static constexpr const char *PLASMA_SHELL_PATH = "/PlasmaShell";
-static constexpr const char *PLASMA_SHELL_IFACE = "org.kde.PlasmaShell";
 
 PanelMover::PanelMover(QObject *parent)
     : QObject(parent)
@@ -88,26 +82,6 @@ void PanelMover::restorePanels()
     qDebug() << "PanelMover: restore result:" << result.trimmed();
     m_movedPanelIds.clear();
     m_moved = false;
-}
-
-QString PanelMover::runPlasmaScript(const QString &script)
-{
-    QDBusInterface plasma(QLatin1String(PLASMA_SERVICE),
-                          QLatin1String(PLASMA_SHELL_PATH),
-                          QLatin1String(PLASMA_SHELL_IFACE),
-                          QDBusConnection::sessionBus());
-
-    if (!plasma.isValid()) {
-        qWarning() << "PanelMover: plasmashell DBus interface not available";
-        return {};
-    }
-
-    QDBusReply<QString> reply = plasma.call(QStringLiteral("evaluateScript"), script);
-    if (!reply.isValid()) {
-        qWarning() << "PanelMover: evaluateScript failed:" << reply.error().message();
-        return {};
-    }
-    return reply.value();
 }
 
 } // namespace PlasmaTP

@@ -21,6 +21,7 @@ class KCMTouchpad : public KQuickConfigModule
     Q_PROPERTY(bool tapToClick READ tapToClick WRITE setTapToClick NOTIFY tapToClickChanged)
     Q_PROPERTY(bool twoFingerRightClick READ twoFingerRightClick WRITE setTwoFingerRightClick NOTIFY twoFingerRightClickChanged)
     Q_PROPERTY(bool twoFingerRotate READ twoFingerRotate WRITE setTwoFingerRotate NOTIFY twoFingerRotateChanged)
+    Q_PROPERTY(QString bottomDockMode READ bottomDockMode WRITE setBottomDockMode NOTIFY bottomDockModeChanged)
     Q_PROPERTY(bool invertScroll READ invertScroll WRITE setInvertScroll NOTIFY invertScrollChanged)
 
 public:
@@ -43,6 +44,7 @@ public:
     bool twoFingerRightClick() const { return m_twoFingerRightClick; }
     bool twoFingerRotate() const { return m_twoFingerRotate; }
     bool invertScroll() const { return m_invertScroll; }
+    QString bottomDockMode() const { return m_bottomDockMode; }
     void setColorScheme(const QString &v) { if (m_colorScheme != v) { m_colorScheme = v; Q_EMIT colorSchemeChanged(); } }
     void setButtonCount(int v) { if (m_buttonCount != v) { m_buttonCount = v; Q_EMIT buttonCountChanged(); } }
     void setPointerSpeed(double v) { if (m_pointerSpeed != v) { m_pointerSpeed = v; Q_EMIT pointerSpeedChanged(); } }
@@ -55,6 +57,7 @@ public:
     void setTapToClick(bool v) { if (m_tapToClick != v) { m_tapToClick = v; Q_EMIT tapToClickChanged(); } }
     void setTwoFingerRightClick(bool v) { if (m_twoFingerRightClick != v) { m_twoFingerRightClick = v; Q_EMIT twoFingerRightClickChanged(); } }
     void setTwoFingerRotate(bool v) { if (m_twoFingerRotate != v) { m_twoFingerRotate = v; Q_EMIT twoFingerRotateChanged(); } }
+    void setBottomDockMode(const QString &v) { if (m_bottomDockMode != v) { m_bottomDockMode = v; Q_EMIT bottomDockModeChanged(); } }
     void setInvertScroll(bool v) { if (m_invertScroll != v) { m_invertScroll = v; Q_EMIT invertScrollChanged(); } }
 
 Q_SIGNALS:
@@ -71,6 +74,7 @@ Q_SIGNALS:
     void twoFingerRightClickChanged();
     void twoFingerRotateChanged();
     void invertScrollChanged();
+    void bottomDockModeChanged();
 
 private:
     QString m_colorScheme = QStringLiteral("system");
@@ -86,6 +90,7 @@ private:
     bool m_twoFingerRightClick = true;
     bool m_twoFingerRotate = true;
     bool m_invertScroll = false;
+    QString m_bottomDockMode = QStringLiteral("touchpad");
 };
 
 } // namespace PlasmaTP

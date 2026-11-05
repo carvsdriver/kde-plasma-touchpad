@@ -64,8 +64,8 @@ The daemon runs as a systemd user service and is enabled automatically; log out 
 sudo dnf install cmake extra-cmake-modules \
     qt6-qtbase-devel qt6-qtdeclarative-devel \
     kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel \
-    kf6-ki18n-devel kf6-kwindowsystem-devel \
-    layer-shell-qt-devel
+    kf6-ki18n-devel kf6-kwindowsystem-devel kf6-kwallet-devel \
+    qt6-qtnetworkauth-devel layer-shell-qt-devel
 ```
 
 ### Build
@@ -99,6 +99,39 @@ Settings are stored in `~/.config/plasma-touchpadrc` under `[Touchpad]`.
 | `fourFingerShowDesktop` | bool | true | Four-finger swipe up → show desktop |
 | `disableRotation` | bool | true | Pause screen rotation script while touchpad is active |
 | `colorScheme` | string | system | Overlay theme: `system`, `light`, `dark` |
+
+### Dashboard YouTube sign-in
+
+With the keyboard on the bottom half and **Keyboard on bottom half** set to
+*Show dashboard*, the Videos widget shows the latest videos from your YouTube
+subscriptions. Signing in opens Google in your default browser, so its
+password manager and passkeys work there; the widget only reads your
+subscription list (`youtube.readonly`). The sign-in is kept in KWallet.
+
+Sign-in needs a Google OAuth client. Until one is set, the widget's
+**Sign In to YouTube…** button is greyed out. To create one:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a
+   project.
+2. Under **APIs & Services → Library**, enable **YouTube Data API v3**.
+3. Under **Google Auth Platform**, click **Get started**: give an app name and
+   your email, and choose **External**.
+4. Under **Data access**, add the scope
+   `https://www.googleapis.com/auth/youtube.readonly`.
+5. Under **Audience**, click **Publish app**. (While an app is in *testing*,
+   Google expires its sign-ins after 7 days.) Until Google verifies the app,
+   sign-in shows a "Google hasn't verified this app" page: choose
+   **Advanced → Go to …** to continue.
+6. Under **Clients → Create client**, choose **Desktop app**, then copy the
+   client ID and secret into the config:
+
+```bash
+kwriteconfig6 --file plasma-touchpadrc --group YouTube --key clientId 'ID.apps.googleusercontent.com'
+kwriteconfig6 --file plasma-touchpadrc --group YouTube --key clientSecret 'SECRET'
+```
+
+The button becomes active within a few seconds. A build can also carry a
+client, with `-DPLASMA_TOUCHPAD_YOUTUBE_CLIENT_ID=… -DPLASMA_TOUCHPAD_YOUTUBE_CLIENT_SECRET=…`.
 
 ## License
 

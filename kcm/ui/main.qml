@@ -35,6 +35,19 @@ KCM.SimpleKCM {
             }
         }
 
+        RowLayout {
+            Kirigami.FormData.label: i18n("Keyboard on bottom half")
+            QQC2.ComboBox {
+                Layout.preferredWidth: 200
+                model: [i18n("Show touchpad"), i18n("Show dashboard")]
+                currentIndex: kcm.bottomDockMode === "dashboard" ? 1 : 0
+                onActivated: function(idx) {
+                    kcm.bottomDockMode = idx === 1 ? "dashboard" : "touchpad"
+                    kcm.needsSave = true
+                }
+            }
+        }
+
         QQC2.CheckBox {
             Kirigami.FormData.label: i18n("Disable screen rotation when active")
             checked: kcm.disableRotation

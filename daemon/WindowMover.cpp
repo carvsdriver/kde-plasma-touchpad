@@ -1,25 +1,19 @@
 #include "WindowMover.h"
+#include "KWinScript.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusReply>
 #include <QDebug>
-#include <QFile>
 
 namespace PlasmaTP {
 
-static constexpr const char *KWIN_SERVICE = "org.kde.KWin";
-static constexpr const char *KWIN_SCRIPTING_PATH = "/Scripting";
-static constexpr const char *KWIN_SCRIPTING_IFACE = "org.kde.kwin.Scripting";
-static constexpr const char *KWIN_SCRIPT_IFACE = "org.kde.kwin.Script";
+
+// KWin script (plugin) name of the window guard; see startGuard().
+static constexpr const char *GUARD_SCRIPT = "plasma-touchpad-window-guard";
 
 // DBus service/path we register so KWin scripts can call reportMovedWindow().
 static constexpr const char *OUR_SERVICE = "org.kde.plasma.touchpad";
 static constexpr const char *OUR_PATH = "/WindowMover";
-
-// Temporary file used to pass scripts to KWin (loadScript requires a file path).
-static constexpr const char *SCRIPT_FILE = "/tmp/plasma-touchpad-kwin.js";
 
 WindowMover::WindowMover(QObject *parent)
     : QObject(parent)
@@ -32,6 +26,8 @@ WindowMover::WindowMover(QObject *parent)
     if (!bus.registerObject(QLatin1String(OUR_PATH), this,
                             QDBusConnection::ExportScriptableSlots))
         qWarning() << "WindowMover: could not register DBus object" << OUR_PATH;
+    // A guard left running by a daemon that crashed while docked.
+    stopGuard();
 }
 
 void WindowMover::reportMovedWindow(const QString &internalId)
@@ -41,6 +37,7 @@ void WindowMover::reportMovedWindow(const QString &internalId)
 
 void WindowMover::moveWindowsToTopScreen()
 {
+    startGuard();
     if (m_moved)
         return;
 
@@ -131,6 +128,7 @@ void WindowMover::moveWindowsToTopScreen()
 
 void WindowMover::restore()
 {
+    stopGuard();
     if (!m_moved)
         return;
 
@@ -197,6 +195,96 @@ void WindowMover::restore()
     m_moved = false;
 }
 
+void WindowMover::startGuard()
+{
+    // Guarded: application windows and their dialogs, and plasmashell's
+    // settings windows (a widget's settings dialog would open beside the
+    // dashboard widget on eDP-2, often taller than the space there).  Not
+    // guarded: this daemon's own surfaces, and panels, widget popups, OSDs
+    // and the like (not normal or dialog windows, not moveable, or - for
+    // plasmashell - not shown in the taskbar).
+    //
+    // A drag is only checked once it ends: fighting an interactive move
+    // from a script makes the window jitter.  A window that lands on eDP-2
+    // is sent to eDP-1, then moved up (and shortened if need be) so that no
+    // part of it reaches below eDP-1.
+    const QString script = QStringLiteral(R"JS(
+        var TOP = "eDP-1";
+        var BOTTOM = "eDP-2";
+
+        function topOutput() {
+            var out = workspace.screenAt({x: 900, y: 562});
+            return out && out.name === TOP ? out : null;
+        }
+
+        // Only windows the user can move.  The daemon's own touchpad and
+        // blackout surfaces (layer-shell) count as normal windows but are
+        // not moveable; they are excluded by class as well, since moving
+        // them would take the touchpad off eDP-2.
+        function guarded(w) {
+            if (!(w.normalWindow || w.dialog) || !w.moveable)
+                return false;
+            if (w.resourceClass === "plasma-touchpad-daemon")
+                return false;
+            // plasmashell (its settings windows report the class
+            // "org.kde.plasmashell", its panels and desktops "plasmashell"):
+            // settings windows have a taskbar entry; widget popups and the
+            // like do not.
+            if (w.resourceClass === "plasmashell" || w.resourceClass === "org.kde.plasmashell")
+                return !w.skipTaskbar;
+            return true;
+        }
+
+        function check(w) {
+            if (w.move || w.resize || w.deleted)
+                return;
+            var top = topOutput();
+            if (!top)
+                return;
+            // Minimized windows lose their output; go by geometry (eDP-2 is
+            // below eDP-1).
+            var g = w.frameGeometry;
+            var onBottom = w.minimized ? (g.y + g.height / 2 >= top.geometry.y + top.geometry.height)
+                                       : (w.output && w.output.name === BOTTOM);
+            if (onBottom) {
+                console.warn("plasma-touchpad guard: sending", w.caption, "back to", TOP);
+                workspace.sendClientToScreen(w, top);
+                g = w.frameGeometry;
+            }
+            if (w.fullScreen || w.minimized)
+                return;
+            // Fit vertically inside eDP-1: nothing below its bottom edge, and
+            // nothing above its top (sendClientToScreen keeps the position
+            // relative to the output, so a window dropped low on eDP-2 lands
+            // partly above eDP-1).
+            var area = top.geometry;
+            var limit = area.y + area.height;
+            if (g.y + g.height > limit || g.y < area.y) {
+                var h = Math.min(g.height, area.height);
+                var y = Math.min(Math.max(g.y, area.y), limit - h);
+                w.frameGeometry = { x: g.x, y: y, width: g.width, height: h };
+            }
+        }
+
+        function watch(w) {
+            if (!guarded(w))
+                return;
+            w.interactiveMoveResizeFinished.connect(function () { check(w); });
+            w.outputChanged.connect(function () { check(w); });
+            check(w);
+        }
+
+        workspace.windowList().forEach(watch);
+        workspace.windowAdded.connect(watch);
+    )JS");
+    PlasmaTP::runKWinScript(QLatin1String(GUARD_SCRIPT), script);
+}
+
+void WindowMover::stopGuard()
+{
+    unloadKWinScript(QLatin1String(GUARD_SCRIPT));
+}
+
 void WindowMover::showDesktopTopScreen()
 {
     const QString script = QStringLiteral(R"JS(
@@ -233,44 +321,7 @@ void WindowMover::unminimizeTopScreen()
 
 void WindowMover::runKWinScript(const QString &scriptContent)
 {
-    // KWin 6 loadScript requires a file path, not inline content.
-    {
-        QFile f{QLatin1String(SCRIPT_FILE)};
-        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-            qWarning() << "WindowMover: cannot write script file" << SCRIPT_FILE;
-            return;
-        }
-        f.write(scriptContent.toUtf8());
-    }
-
-    QDBusInterface kwin(QLatin1String(KWIN_SERVICE),
-                        QLatin1String(KWIN_SCRIPTING_PATH),
-                        QLatin1String(KWIN_SCRIPTING_IFACE),
-                        QDBusConnection::sessionBus());
-
-    if (!kwin.isValid()) {
-        qWarning() << "WindowMover: KWin scripting DBus not available";
-        return;
-    }
-
-    // loadScript returns the script ID (or the ID of an already-loaded copy).
-    // Unload first so the fresh file content is guaranteed to run.
-    kwin.call(QStringLiteral("unloadScript"), QLatin1String("plasma-touchpad-window-mover"));
-    QDBusReply<int> loadReply = kwin.call(
-        QStringLiteral("loadScript"),
-        QLatin1String(SCRIPT_FILE),
-        QStringLiteral("plasma-touchpad-window-mover"));
-
-    if (!loadReply.isValid() || loadReply.value() < 0) {
-        qWarning() << "WindowMover: loadScript failed:" << loadReply.error().message();
-        return;
-    }
-
-    const QString scriptPath = QStringLiteral("/Scripting/Script") + QString::number(loadReply.value());
-    QDBusInterface scriptIface(QLatin1String(KWIN_SERVICE), scriptPath,
-                               QLatin1String(KWIN_SCRIPT_IFACE),
-                               QDBusConnection::sessionBus());
-    scriptIface.call(QStringLiteral("run"));
+    PlasmaTP::runKWinScript(QStringLiteral("plasma-touchpad-window-mover"), scriptContent);
 }
 
 } // namespace PlasmaTP

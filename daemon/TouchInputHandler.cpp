@@ -157,6 +157,22 @@ bool TouchInputHandler::openTouchscreen()
             if (absX.resolution > 0)
                 m_rawPerMm = absX.resolution;
 
+            // Don't grab while a finger is down: KWin would see the touch
+            // begin but never end, leaving it stuck and blocking input on
+            // every screen.  The caller retries until the screen is clear.
+            struct {
+                __u32 code;
+                __s32 values[MAX_SLOTS];
+            } req{};
+            req.code = ABS_MT_TRACKING_ID;
+            if (::ioctl(fd, EVIOCGMTSLOTS(sizeof(req)), &req) == 0 &&
+                std::any_of(std::begin(req.values), std::end(req.values),
+                            [](__s32 id) { return id != -1; })) {
+                qDebug() << "TouchInputHandler: finger on" << path << "- deferring grab";
+                ::close(fd);
+                return false;
+            }
+
             if (::ioctl(fd, EVIOCGRAB, 1) < 0)
                 qWarning() << "TouchInputHandler: EVIOCGRAB failed";
 

@@ -36,6 +36,7 @@ void KCMTouchpad::load()
     setTwoFingerRightClick(grp.readEntry("twoFingerRightClick", s.twoFingerRightClick));
     setTwoFingerRotate(grp.readEntry("twoFingerRotate", s.twoFingerRotate));
     setInvertScroll(grp.readEntry("invertScroll", s.invertScroll));
+    setBottomDockMode(grp.readEntry("bottomDockMode", s.bottomDockMode));
     setNeedsSave(false);
 }
 
@@ -56,6 +57,7 @@ void KCMTouchpad::save()
     grp.writeEntry("twoFingerRightClick", m_twoFingerRightClick);
     grp.writeEntry("twoFingerRotate", m_twoFingerRotate);
     grp.writeEntry("invertScroll", m_invertScroll);
+    grp.writeEntry("bottomDockMode", m_bottomDockMode);
     cfg.sync();
     setNeedsSave(false);
 
@@ -82,6 +84,7 @@ void KCMTouchpad::defaults()
     setTwoFingerRightClick(s.twoFingerRightClick);
     setTwoFingerRotate(s.twoFingerRotate);
     setInvertScroll(s.invertScroll);
+    setBottomDockMode(s.bottomDockMode);
     setNeedsSave(true);
 }
 

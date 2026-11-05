@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "carvsdriver@gmail.com",
+                "Name": "Dave Carey"
+            }
+        ],
+        "Category": "Online Services",
+        "Description": "Latest videos from the YouTube channels you subscribe to. Part of the Yoga Book 9 touchpad dashboard.",
+        "Icon": "video-television",
+        "Id": "org.kde.plasma.touchpad.youtube",
+        "License": "GPL-2.0-or-later",
+        "Name": "Dashboard Videos",
+        "Version": "0.1",
+        "Website": "https://github.com/carvsdriver/kde-plasma-touchpad"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

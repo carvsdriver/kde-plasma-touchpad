@@ -2,6 +2,7 @@
 #include "TouchInputHandler.h"
 #include "WindowMover.h"
 #include "PanelMover.h"
+#include "DashboardManager.h"
 #include "Settings.h"
 
 #include <QProcess>
@@ -12,6 +13,8 @@
 #include <QUrl>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDebug>
 
 #include <KConfig>
@@ -56,6 +59,7 @@ static Settings loadFromConfig()
     s.twoFingerRightClick = grp.readEntry("twoFingerRightClick", s.twoFingerRightClick);
     s.twoFingerRotate = grp.readEntry("twoFingerRotate", s.twoFingerRotate);
     s.invertScroll = grp.readEntry("invertScroll", s.invertScroll);
+    s.bottomDockMode = grp.readEntry("bottomDockMode", s.bottomDockMode);
     return s;
 }
 
@@ -64,6 +68,7 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     , m_touch(new TouchInputHandler(this))
     , m_windows(new WindowMover(this))
     , m_panels(new PanelMover(this))
+    , m_dashboard(new DashboardManager(this))
 {
     connect(m_touch, &TouchInputHandler::deviceError, this, [this]() {
         qWarning() << "TouchpadOverlay: touch device lost, will restart";
@@ -118,6 +123,7 @@ TouchpadOverlay::TouchpadOverlay(QObject *parent)
     });
 
     watchVirtualKeyboard();
+    watchScreenLock();
 
     QDBusConnection::sessionBus().connect(
         QString(),
@@ -141,6 +147,47 @@ TouchpadOverlay::~TouchpadOverlay()
     hide();
     delete m_view;
     delete m_blackout;
+}
+
+void TouchpadOverlay::watchScreenLock()
+{
+    static const QString service = QStringLiteral("org.freedesktop.ScreenSaver");
+    static const QString path = QStringLiteral("/ScreenSaver");
+    static const QString iface = QStringLiteral("org.freedesktop.ScreenSaver");
+    QDBusConnection::sessionBus().connect(service, path, iface, QStringLiteral("ActiveChanged"),
+                                          this, SLOT(onScreenLockChanged(bool)));
+    // The daemon may start while the screen is locked.  Asked without
+    // waiting: a signal that arrives first is newer, so it wins.
+    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(
+        QDBusMessage::createMethodCall(service, path, iface, QStringLiteral("GetActive"))), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        const QDBusPendingReply<bool> reply = *w;
+        if (reply.isValid() && reply.value() && !m_screenLocked)
+            onScreenLockChanged(true);
+    });
+}
+
+void TouchpadOverlay::onScreenLockChanged(bool locked)
+{
+    if (locked == m_screenLocked)
+        return;
+    m_screenLocked = locked;
+    qDebug() << "TouchpadOverlay: screen" << (locked ? "locked" : "unlocked");
+    if (locked) {
+        // A show already scheduled waits for the unlock instead.
+        m_showTimer->stop();
+        return;
+    }
+    // Let the session settle after the lock screen goes before rearranging
+    // it.
+    if (!m_active && m_pendingPosition != DockPosition::Detached) {
+        qDebug() << "TouchpadOverlay: showing overlay in 1.5 s";
+        QTimer::singleShot(1500, this, [this]() {
+            if (!m_screenLocked && !m_active && m_pendingPosition != DockPosition::Detached)
+                show(m_pendingPosition);
+        });
+    }
 }
 
 void TouchpadOverlay::onScreenAdded(QScreen *screen)
@@ -189,6 +236,13 @@ QRectF TouchpadOverlay::overlayRect(DockPosition position) const
     }
 }
 
+TouchpadOverlay::Mode TouchpadOverlay::modeFor(DockPosition position, const Settings &s) const
+{
+    if (position == DockPosition::BottomHalf && s.bottomDockMode == QLatin1String("dashboard"))
+        return Mode::Dashboard;
+    return Mode::Touchpad;
+}
+
 bool TouchpadOverlay::isInTentMode() const
 {
     QScreen *edp1 = nullptr;
@@ -214,6 +268,11 @@ void TouchpadOverlay::show(DockPosition position)
     m_pendingPosition = position;
     if (position == DockPosition::Detached)
         return;
+    if (m_screenLocked) {
+        // onScreenLockChanged() shows the overlay after the unlock.
+        qDebug() << "TouchpadOverlay: screen locked; showing overlay after unlock";
+        return;
+    }
 
     if (isInTentMode()) {
         // In tent mode both screens share the same origin; force clamshell
@@ -253,12 +312,7 @@ void TouchpadOverlay::ensureWindows()
     // If the compositor dismisses the surface (e.g. its output goes away),
     // don't let LayerShellQt close() the window; onScreenRemoved() hides it.
     m_blackoutLayerWindow->setCloseOnDismissed(false);
-    m_blackoutLayerWindow->setAnchors(LayerShellQt::Window::Anchors(
-        LayerShellQt::Window::AnchorLeft |
-        LayerShellQt::Window::AnchorRight |
-        LayerShellQt::Window::AnchorTop |
-        LayerShellQt::Window::AnchorBottom));
-    m_blackoutLayerWindow->setDesiredSize(QSize(0, 0)); // compositor fills all-anchored surface
+    // Anchors and size depend on the mode and are set in createOverlayImpl().
 
     connect(m_blackout, &QWindow::screenChanged, this, [this](QScreen *s) {
         if (!m_active || !s || s->name() == QLatin1String(BOTTOM_SCREEN))
@@ -285,7 +339,10 @@ void TouchpadOverlay::ensureWindows()
     connect(m_view, &QWindow::screenChanged, this, [this](QScreen *s) {
         const QString name = s ? s->name() : QStringLiteral("(null)");
         qDebug() << "TouchpadOverlay: overlay screen changed to" << name;
-        if (!m_active || !s || s->name() == QLatin1String(BOTTOM_SCREEN))
+        // In dashboard mode the overlay stays hidden; Qt may still move the
+        // hidden window between screens, which must not show it.
+        if (!m_active || m_mode != Mode::Touchpad || !s ||
+            s->name() == QLatin1String(BOTTOM_SCREEN))
             return;
         // KWin moved the overlay off eDP-2 (probably because it reassigned the
         // active screen after windows were moved).  Re-pin by calling setScreen
@@ -304,6 +361,11 @@ void TouchpadOverlay::createOverlayImpl()
 {
     if (m_active || m_pendingPosition == DockPosition::Detached)
         return;
+    if (m_screenLocked) {
+        // onScreenLockChanged() shows the overlay after the unlock.
+        qDebug() << "TouchpadOverlay: screen locked; showing overlay after unlock";
+        return;
+    }
 
     QScreen *targetScreen = findBottomScreen();
     if (!targetScreen) {
@@ -332,9 +394,38 @@ void TouchpadOverlay::createOverlayImpl()
 
     ensureWindows();
 
+    m_mode = modeFor(m_pendingPosition, s);
+    const QRectF touchRect = overlayRect(m_pendingPosition);
+
+    // The blackout fills eDP-2 behind the touchpad; in dashboard mode it
+    // covers only the keyboard area below the dashboard, absorbing touches
+    // there now that the touchscreen is not grabbed.  Anchors are applied
+    // when the layer surface is created, at show().
+    if (m_mode == Mode::Dashboard) {
+        m_blackoutLayerWindow->setAnchors(LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorLeft |
+            LayerShellQt::Window::AnchorRight |
+            LayerShellQt::Window::AnchorBottom));
+        m_blackoutLayerWindow->setDesiredSize(QSize(0, m_screenH - static_cast<int>(touchRect.height())));
+    } else {
+        m_blackoutLayerWindow->setAnchors(LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorLeft |
+            LayerShellQt::Window::AnchorRight |
+            LayerShellQt::Window::AnchorTop |
+            LayerShellQt::Window::AnchorBottom));
+        m_blackoutLayerWindow->setDesiredSize(QSize(0, 0));
+    }
     m_blackout->setScreen(targetScreen);
     m_blackoutLayerWindow->setScreen(targetScreen);
     m_blackout->show();
+
+    if (m_mode == Mode::Dashboard) {
+        m_dashboard->showWidgets(touchRect.size().toSize());
+        m_active = true;
+        qDebug() << "TouchpadOverlay: dashboard shown on" << BOTTOM_SCREEN
+                 << "area" << touchRect;
+        return;
+    }
 
     // Pin Qt's own screen tracking to eDP-2 before the layer surface is
     // created.  LayerShellQt falls back to QWindow::screen() when its own
@@ -366,7 +457,6 @@ void TouchpadOverlay::createOverlayImpl()
     m_view->show();
     m_active = true;
 
-    const QRectF touchRect = overlayRect(m_pendingPosition);
     m_touch->setScreenSize(m_screenW, m_screenH);
     m_touch->setTouchpadRect(touchRect);
     applySettings(s);
@@ -408,7 +498,13 @@ void TouchpadOverlay::reloadSettings()
 {
     if (!m_active)
         return;
-    applySettings(loadFromConfig());
+    const Settings s = loadFromConfig();
+    if (modeFor(m_pendingPosition, s) != m_mode) {
+        qDebug() << "TouchpadOverlay: dock mode changed; re-showing";
+        show(m_pendingPosition);
+        return;
+    }
+    applySettings(s);
     qDebug() << "TouchpadOverlay: settings reloaded";
 }
 
@@ -429,6 +525,8 @@ void TouchpadOverlay::deactivate()
     m_touchRetryTimer->stop();
     m_touch->stop();
     m_touch->setTouchpadRect(QRectF());
+    if (m_mode == Mode::Dashboard)
+        m_dashboard->hideWidgets();
     m_windows->restore();
     m_panels->restorePanels();
     setVirtualKeyboardEnabled(true);

@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "carvsdriver@gmail.com",
+                "Name": "Dave Carey"
+            }
+        ],
+        "Category": "Online Services",
+        "Description": "Headlines from RSS and Atom news feeds, sized for touch. Part of the Yoga Book 9 touchpad dashboard.",
+        "Icon": "news-subscribe",
+        "Id": "org.kde.plasma.touchpad.news",
+        "License": "GPL-2.0-or-later",
+        "Name": "Dashboard News",
+        "Version": "0.1",
+        "Website": "https://github.com/carvsdriver/kde-plasma-touchpad"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

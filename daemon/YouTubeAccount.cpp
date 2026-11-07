@@ -174,8 +174,8 @@ void YouTubeAccount::signIn()
         qWarning() << "YouTubeAccount: no OAuth client configured";
         return;
     }
-    if (m_state == State::SigningIn)
-        return;
+    // Signing in again while a sign-in is pending (its browser tab closed,
+    // say) starts over with a new flow and redirect port.
 
     delete m_flow;
     m_flow = new QOAuth2AuthorizationCodeFlow(m_network, this);
@@ -234,6 +234,16 @@ void YouTubeAccount::signIn()
 
     setState(State::SigningIn);
     m_flow->grant();
+
+    // Give up on a sign-in that is never finished in the browser.  Tied to
+    // this flow, so starting over (which deletes it) cancels the timeout.
+    QTimer::singleShot(5 * 60 * 1000, m_flow, [this]() {
+        if (m_state != State::SigningIn)
+            return;
+        qWarning() << "YouTubeAccount: sign-in not finished in 5 minutes; giving up";
+        m_replyHandler->close();
+        setState(m_refreshToken.isEmpty() ? State::SignedOut : State::SignedIn);
+    });
 }
 
 void YouTubeAccount::signOut()
@@ -266,8 +276,12 @@ void YouTubeAccount::forget()
 
 QString YouTubeAccount::subscriptions()
 {
+    // A list cached by a version that didn't keep channel icons is fetched
+    // again for them.
+    const bool withoutIcons = !m_subscriptions.isEmpty()
+        && !m_subscriptions.first().toObject().contains(QStringLiteral("icon"));
     if (m_state == State::SignedIn && !m_fetching
-        && (!m_subscriptionsFetched.isValid()
+        && (!m_subscriptionsFetched.isValid() || withoutIcons
             || m_subscriptionsFetched.secsTo(QDateTime::currentDateTimeUtc()) > SUBSCRIPTIONS_MAX_AGE_SECS))
         fetchSubscriptions();
     if (m_state != State::SignedIn)
@@ -364,9 +378,14 @@ void YouTubeAccount::fetchSubscriptionsPage(const QString &token, const QString 
             const QJsonObject snippet = item.toObject().value(QStringLiteral("snippet")).toObject();
             const QString id = snippet.value(QStringLiteral("resourceId")).toObject()
                                    .value(QStringLiteral("channelId")).toString();
+            // The channel's avatar (88 px), for the widget's channel list.
+            const QString icon = snippet.value(QStringLiteral("thumbnails")).toObject()
+                                     .value(QStringLiteral("default")).toObject()
+                                     .value(QStringLiteral("url")).toString();
             if (!id.isEmpty())
                 collected.append(QJsonObject{{QStringLiteral("id"), id},
-                                             {QStringLiteral("title"), snippet.value(QStringLiteral("title"))}});
+                                             {QStringLiteral("title"), snippet.value(QStringLiteral("title"))},
+                                             {QStringLiteral("icon"), icon}});
         }
         const QString next = json.value(QStringLiteral("nextPageToken")).toString();
         if (!next.isEmpty()) {
@@ -413,7 +432,9 @@ void YouTubeAccount::expireCache()
         : (!m_subscriptions.isEmpty() || !m_accountName.isEmpty());
     if (!expired)
         return;
-    qDebug() << "YouTubeAccount: cached YouTube data is over 30 days old; deleting it";
+    qDebug() << "YouTubeAccount: cached YouTube data is"
+             << (m_subscriptionsFetched.isValid() ? "over 30 days old" : "undated")
+             << "- deleting it";
     m_subscriptions = QJsonArray();
     m_accountName.clear();
     m_subscriptionsFetched = QDateTime();

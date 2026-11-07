@@ -82,9 +82,13 @@ KCM.SimpleKCM {
             }
             QQC2.Button {
                 visible: page.accountStatus !== "unavailable" && page.accountStatus !== ""
-                enabled: page.accountStatus === "signed-in" || page.accountStatus === "signed-out"
-                icon.name: page.accountStatus === "signed-in" ? "system-log-out" : "user-identity"
-                text: page.accountStatus === "signed-in" ? i18n("Sign Out") : i18n("Sign In to YouTube…")
+                // While a sign-in is pending this starts over, in case its
+                // browser tab was closed.
+                enabled: page.accountStatus !== "not-configured"
+                icon.name: page.accountStatus === "signed-in" ? "system-log-out"
+                         : page.accountStatus === "signing-in" ? "view-refresh" : "user-identity"
+                text: page.accountStatus === "signed-in" ? i18n("Sign Out")
+                    : page.accountStatus === "signing-in" ? i18n("Try Again") : i18n("Sign In to YouTube…")
                 onClicked: page.accountCall(page.accountStatus === "signed-in" ? "signOut" : "signIn")
             }
         }
@@ -105,7 +109,7 @@ KCM.SimpleKCM {
 
         QQC2.SpinBox {
             id: maxItems
-            Kirigami.FormData.label: i18n("Videos to show:")
+            Kirigami.FormData.label: i18n("Videos per batch:")
             from: 4
             to: 200
         }

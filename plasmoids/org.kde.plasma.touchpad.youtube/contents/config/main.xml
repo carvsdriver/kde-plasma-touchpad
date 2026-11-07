@@ -14,7 +14,7 @@
       <default>true</default>
     </entry>
     <entry name="maxItems" type="Int">
-      <label>Most videos to show</label>
+      <label>Videos shown at first, and added by each "Load More"</label>
       <default>24</default>
       <min>4</min>
       <max>200</max>
@@ -24,6 +24,12 @@
       <default>30</default>
       <min>5</min>
       <max>1440</max>
+    </entry>
+    <!-- A comma-separated string rather than a StringList: the dashboard
+         saves and restores widget settings as plain strings. -->
+    <entry name="hiddenChannels" type="String">
+      <label>Subscribed channels left out of the grid: channel IDs, separated by commas</label>
+      <default></default>
     </entry>
     <entry name="openIn" type="String">
       <label>Where videos open: "widget" (inside the widget) or "browser" (the default browser)</label>

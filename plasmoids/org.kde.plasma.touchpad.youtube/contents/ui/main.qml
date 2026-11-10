@@ -48,6 +48,9 @@ PlasmoidItem {
     // "signed-in", "signed-out", "signing-in", "not-configured",
     // "unavailable" (daemon not running), or "" before the first answer.
     property string accountStatus: ""
+    // The signed-in account's channel name and avatar URL, for the header.
+    property string accountName: ""
+    property string accountIcon: ""
     // Retries while a fresh sign-in's subscription list is still on its way.
     property int subscriptionRetries: 0
 
@@ -130,6 +133,13 @@ setTimeout(function () { if (!ready) report("error:timeout"); }, 15000);
         accountCall("status", status => {
             const was = accountStatus;
             accountStatus = status;
+            if (status === "signed-in") {
+                accountCall("accountName", name => accountName = name);
+                accountCall("accountIcon", icon => accountIcon = icon);
+            } else {
+                accountName = "";
+                accountIcon = "";
+            }
             if (status === "signed-in" && was !== "signed-in") {
                 subscriptionRetries = 0;
                 refresh();
@@ -328,14 +338,22 @@ setTimeout(function () { if (!ready) report("error:timeout"); }, 15000);
                     PlasmaComponents.ToolTip.text: text
                     PlasmaComponents.ToolTip.visible: hovered
                 }
-                Kirigami.Heading {
-                    // Gives way to the search field when space is short.
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: Kirigami.Units.gridUnit * 3
-                    level: 3
-                    text: Plasmoid.configuration.title
-                    elide: Text.ElideRight
+                // YouTube's icon, unaltered, attributing the videos; it
+                // links to YouTube, as YouTube's branding rules ask.
+                Image {
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    Layout.preferredWidth: Math.round(Layout.preferredHeight * 28.57 / 20)
+                    source: Qt.resolvedUrl("../images/youtube.svg")
+                    sourceSize.height: Layout.preferredHeight * 2
+                    fillMode: Image.PreserveAspectFit
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: Qt.openUrlExternally("https://www.youtube.com/") }
+                    PlasmaComponents.ToolTip.text: i18n("Open YouTube")
+                    PlasmaComponents.ToolTip.visible: logoHover.hovered
+                    HoverHandler { id: logoHover }
                 }
+                // Takes the room the search field doesn't, keeping it right.
+                Item { Layout.fillWidth: true }
                 PlasmaExtras.SearchField {
                     Layout.fillWidth: true
                     Layout.maximumWidth: Kirigami.Units.gridUnit * 14
@@ -347,6 +365,35 @@ setTimeout(function () { if (!ready) report("error:timeout"); }, 15000);
                     visible: root.loading
                     Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                     Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                }
+                // The signed-in account's avatar (its initial until the
+                // picture loads); its name is in the tooltip.
+                Item {
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                    visible: root.accountStatus === "signed-in" && root.accountName !== ""
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: Kirigami.Theme.alternateBackgroundColor
+                        PlasmaComponents.Label {
+                            anchors.centerIn: parent
+                            text: root.accountName.charAt(0).toUpperCase()
+                            font: Kirigami.Theme.smallFont
+                            textFormat: Text.PlainText
+                        }
+                        Kirigami.ShadowedImage {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: "transparent"
+                            source: root.accountIcon
+                            asynchronous: true
+                            fillMode: Image.PreserveAspectCrop
+                        }
+                    }
+                    HoverHandler { id: accountHover }
+                    PlasmaComponents.ToolTip.text: i18n("Signed in as %1", root.accountName)
+                    PlasmaComponents.ToolTip.visible: accountHover.hovered
                 }
                 PlasmaComponents.ToolButton {
                     icon.name: "view-refresh"

@@ -57,11 +57,13 @@ public Q_SLOTS:
     Q_SCRIPTABLE QString status();
     // The signed-in account's channel name, if known.
     Q_SCRIPTABLE QString accountName() const;
+    // The signed-in account's channel avatar (an image URL), if known.
+    Q_SCRIPTABLE QString accountIcon() const;
     // Open Google's sign-in page in the default browser.
     Q_SCRIPTABLE void signIn();
     // Revoke access and forget the account.
     Q_SCRIPTABLE void signOut();
-    // The subscribed channels as a JSON array of {"id", "title"}; the cached
+    // The subscribed channels as a JSON array of {"id", "title", "icon"}; the cached
     // list, refreshed in the background when it is old.
     Q_SCRIPTABLE QString subscriptions();
 
@@ -95,6 +97,7 @@ private:
     QString m_accessToken;
     QDateTime m_accessTokenExpiry;
     QString m_accountName;
+    QString m_accountIcon;
     QJsonArray m_subscriptions;
     QDateTime m_subscriptionsFetched;
     bool m_fetching = false;

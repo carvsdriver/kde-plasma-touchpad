@@ -5,10 +5,6 @@
                           http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
   <kcfgfile name=""/>
   <group name="General">
-    <entry name="title" type="String">
-      <label>Heading shown above the videos</label>
-      <default>YouTube</default>
-    </entry>
     <entry name="hideShorts" type="Bool">
       <label>Leave out Shorts</label>
       <default>true</default>

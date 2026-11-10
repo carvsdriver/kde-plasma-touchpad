@@ -56,6 +56,7 @@ YouTubeAccount::YouTubeAccount(QObject *parent)
     KConfig cfg(QLatin1String(Settings::configFile()));
     const KConfigGroup grp = cfg.group(QLatin1String(CONFIG_GROUP));
     m_accountName = grp.readEntry("accountName", QString());
+    m_accountIcon = grp.readEntry("accountIcon", QString());
     m_subscriptions = QJsonDocument::fromJson(grp.readEntry("subscriptions", QByteArray("[]"))).array();
     m_subscriptionsFetched = grp.readEntry("subscriptionsFetched", QDateTime());
     expireCache();
@@ -112,6 +113,11 @@ QString YouTubeAccount::status()
 QString YouTubeAccount::accountName() const
 {
     return m_state == State::SignedIn ? m_accountName : QString();
+}
+
+QString YouTubeAccount::accountIcon() const
+{
+    return m_state == State::SignedIn ? m_accountIcon : QString();
 }
 
 void YouTubeAccount::setState(State state)
@@ -266,6 +272,7 @@ void YouTubeAccount::forget()
     m_refreshToken.clear();
     m_accessToken.clear();
     m_accountName.clear();
+    m_accountIcon.clear();
     m_subscriptions = QJsonArray();
     m_subscriptionsFetched = QDateTime();
     storeRefreshToken(QString());
@@ -276,10 +283,11 @@ void YouTubeAccount::forget()
 
 QString YouTubeAccount::subscriptions()
 {
-    // A list cached by a version that didn't keep channel icons is fetched
-    // again for them.
-    const bool withoutIcons = !m_subscriptions.isEmpty()
-        && !m_subscriptions.first().toObject().contains(QStringLiteral("icon"));
+    // Data cached by a version that kept no channel or account icons is
+    // fetched again for them.
+    const bool withoutIcons = (!m_subscriptions.isEmpty()
+                               && !m_subscriptions.first().toObject().contains(QStringLiteral("icon")))
+        || (!m_accountName.isEmpty() && m_accountIcon.isEmpty());
     if (m_state == State::SignedIn && !m_fetching
         && (!m_subscriptionsFetched.isValid() || withoutIcons
             || m_subscriptionsFetched.secsTo(QDateTime::currentDateTimeUtc()) > SUBSCRIPTIONS_MAX_AGE_SECS))
@@ -413,11 +421,15 @@ void YouTubeAccount::fetchAccountName(const QString &token)
         const QJsonArray items = QJsonDocument::fromJson(reply->readAll()).object()
                                      .value(QStringLiteral("items")).toArray();
         // An account without a YouTube channel has none; that's fine.
-        const QString name = items.isEmpty() ? QString()
-            : items.first().toObject().value(QStringLiteral("snippet")).toObject()
-                  .value(QStringLiteral("title")).toString();
-        if (name != m_accountName) {
+        const QJsonObject snippet = items.isEmpty() ? QJsonObject()
+            : items.first().toObject().value(QStringLiteral("snippet")).toObject();
+        const QString name = snippet.value(QStringLiteral("title")).toString();
+        const QString icon = snippet.value(QStringLiteral("thumbnails")).toObject()
+                                 .value(QStringLiteral("default")).toObject()
+                                 .value(QStringLiteral("url")).toString();
+        if (name != m_accountName || icon != m_accountIcon) {
             m_accountName = name;
+            m_accountIcon = icon;
             saveCache();
             Q_EMIT statusChanged();
         }
@@ -437,6 +449,7 @@ void YouTubeAccount::expireCache()
              << "- deleting it";
     m_subscriptions = QJsonArray();
     m_accountName.clear();
+    m_accountIcon.clear();
     m_subscriptionsFetched = QDateTime();
     saveCache();
     Q_EMIT subscriptionsChanged();
@@ -448,6 +461,7 @@ void YouTubeAccount::saveCache()
     KConfig cfg(QLatin1String(Settings::configFile()));
     KConfigGroup grp = cfg.group(QLatin1String(CONFIG_GROUP));
     grp.writeEntry("accountName", m_accountName);
+    grp.writeEntry("accountIcon", m_accountIcon);
     grp.writeEntry("subscriptions", QJsonDocument(m_subscriptions).toJson(QJsonDocument::Compact));
     if (m_subscriptionsFetched.isValid())
         grp.writeEntry("subscriptionsFetched", m_subscriptionsFetched);

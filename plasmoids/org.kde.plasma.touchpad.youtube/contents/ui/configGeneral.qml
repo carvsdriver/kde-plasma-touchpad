@@ -8,7 +8,6 @@ import org.kde.plasma.workspace.dbus as DBus
 KCM.SimpleKCM {
     id: page
 
-    property alias cfg_title: titleField.text
     property alias cfg_hideShorts: hideShorts.checked
     property alias cfg_maxItems: maxItems.value
     property alias cfg_refreshMinutes: refreshMinutes.value
@@ -54,11 +53,6 @@ KCM.SimpleKCM {
     }
 
     Kirigami.FormLayout {
-        QQC2.TextField {
-            id: titleField
-            Kirigami.FormData.label: i18n("Heading:")
-        }
-
         RowLayout {
             Kirigami.FormData.label: i18n("YouTube account:")
             spacing: Kirigami.Units.smallSpacing
